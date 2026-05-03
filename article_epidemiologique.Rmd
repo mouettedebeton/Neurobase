@@ -1,0 +1,1650 @@
+---
+title: "Article épidémiologique 2026"
+output:
+  html_document: 
+    highlight: tango
+    theme: readable
+    number_sections: true
+  pdf_document: default
+  html_notebook: default
+---
+## Chargement des librairies et de la table
+### Chargement des librairies
+```{r include=FALSE}
+library(readr)
+library(dplyr)
+library(tidyr)
+library(tibble)
+library(stringr)
+library(tidyselect)
+library(labelled)
+library(ggplot2)
+library(lubridate)
+library(survival)
+library(ggsurvfit)
+library(ggsci)
+library(Hmisc)
+library(plotly)
+library(tableone)
+library(flextable)
+library(officer)
+library(gtsummary)
+library(sumExtras)
+library(ggExtra)
+library(forcats)
+library(finalfit)
+source("customtab.R")
+```
+
+### Chargement de la table des données
+```{r}
+data <- read_csv("Extractions/05042026/BCTNEUROBASE_DATA_2026-04-05_1148.csv",
+                                              col_types = cols(rfstdtc = col_date(format = "%Y-%m-%d"), 
+                                                               brthdat = col_date(format = "%Y-%m-%d"), 
+                                                               date_symptomes = col_datetime(format = "%Y-%m-%d %H:%M"), 
+                                                               date_pec = col_datetime(format = "%Y-%m-%d %H:%M"), 
+                                                               date_admission = col_datetime(format = "%Y-%m-%d %H:%M"), 
+                                                               hsa_anevrysme_traitement_heure = col_date(format = "%Y-%m-%d"), 
+                                                               hsa_vasospasme_dg_date = col_date(format = "%Y-%m-%d"), 
+                                                               aic_thrombectomie_heure_ponction = col_datetime(format = "%Y-%m-%d %H:%M"), 
+                                                               aic_thrombectomie_revasc_heure = col_datetime(format = "%Y-%m-%d %H:%M"), 
+                                                               capteur_pic_date = col_date(format = "%Y-%m-%d"), 
+                                                               htic_traitement_dve_date = col_date(format = "%Y-%m-%d"), 
+                                                               neurochirurgie_date = col_date(format = "%Y-%m-%d"), 
+                                                               sedation_rea_date = col_date(format = "%Y-%m-%d"), 
+                                                               deces_date = col_date(format = "%Y-%m-%d"), 
+                                                               sortie_date = col_date(format = "%Y-%m-%d"), 
+                                                               ouverture_yeux_date = col_date(format = "%Y-%m-%d"), 
+                                                               crsr_premier_date = col_date(format = "%Y-%m-%d"), 
+                                                               evaluation_distance_date = col_date(format = "%Y-%m-%d"),
+                                                               aic_stent_loca_autre = col_character(),
+                                                               inm_microbe_5 = col_double(),
+                                                               inm_ttt_proba_mol_1_txt = col_character(),
+                                                               inm_ttt_docu_mol_1_txt = col_character(),
+                                                               neurochirurgie_nombre = col_double(),
+                                                               eval_distance_score_rm = col_double()))
+```
+### Vérification des spécifications des colonnes
+```{r echo = T, results = 'hide'}
+spec(data)
+```
+### Vérification de l'absence de problèmes de concordance des données avec les types de colonnes
+```{r}
+problems(data)
+```
+### Script RedCap d'attribution des légendes, unités, et facteurs
+```{r echo = F, results = 'hide'}
+label(data$record_id)="Record ID"
+label(data$redcap_data_access_group)="Data Access Group"
+label(data$criteres_inclusion___1)="Criteres dinclusion :  (choice=Admission en Réa / USC / SSPI < = 48h entrée hôpital)"
+label(data$criteres_inclusion___2)="Criteres dinclusion :  (choice=Agression neurologique aiguë)"
+label(data$criteres_inclusion___3)="Criteres dinclusion :  (choice=Âge > 17 ans)"
+label(data$criteres_inclusion___4)="Criteres dinclusion :  (choice=Non-opposition)"
+label(data$centre_inclusion)="Centre dinclusion"
+label(data$traumabase)="Patient inclus dans la Traumabase ?"
+label(data$inclusion_tb_numero)="inclusion_tb_numero"
+label(data$invnam)="Investigateur recruteur"
+label(data$rfstdtc)="Date dinclusion"
+label(data$subjlnam)="Initiale nom"
+label(data$subjfnam)="Initiale prénom"
+label(data$sex)="Sexe"
+label(data$femme_peripartum)="Grossesse en cours ou post-partum immédiat ?"
+label(data$poids)="Poids"
+label(data$taille)="Taille (en cm)"
+label(data$more_than_2_years_old)="Le patient a til plus de 2 ans?"
+label(data$brthdat)="Date de naissance"
+label(data$age)="Age approximatif à linclusion"
+label(data$ieyn)="Le patient répond-il bien à tous les critères déligibilité?"
+label(data$donnes_dmographiques_aphp_complete)="Complete?"
+label(data$hta)="Hypertension arterielle"
+label(data$hta_traitement)="HTA traitée"
+label(data$diabete)="Diabete"
+label(data$tabac)="Tabagisme"
+label(data$intox_chronique___1)="Intoxication chronique (choice=Aucune)"
+label(data$intox_chronique___2)="Intoxication chronique (choice=Alcool)"
+label(data$intox_chronique___3)="Intoxication chronique (choice=Cannabis)"
+label(data$intox_chronique___4)="Intoxication chronique (choice=Autre)"
+label(data$intox_chronique___5)="Intoxication chronique (choice=Non disponible)"
+label(data$intox_chronique_autre)="Autre - Precisez"
+label(data$intox_aigue___1)="Intoxication aigue (choice=Aucune)"
+label(data$intox_aigue___2)="Intoxication aigue (choice=Alcool)"
+label(data$intox_aigue___3)="Intoxication aigue (choice=Cannabis)"
+label(data$intox_aigue___4)="Intoxication aigue (choice=Autre)"
+label(data$intox_aigue___5)="Intoxication aigue (choice=Non disponible)"
+label(data$intox_aigue_autre)="Autre - Precisez"
+label(data$aap)="Antiagregants plaquettaires"
+label(data$aap_type___1)="Type dantiagregant plaquettaire (choice=Aspirine)"
+label(data$aap_type___2)="Type dantiagregant plaquettaire (choice=Clopidogrel (PLAVIX))"
+label(data$aap_type___3)="Type dantiagregant plaquettaire (choice=Ticlodipine (TICLID))"
+label(data$aap_type___4)="Type dantiagregant plaquettaire (choice=Prasugrel (EFIENT))"
+label(data$aap_type___5)="Type dantiagregant plaquettaire (choice=Ticagrelor (BRILIQUE))"
+label(data$aap_type___6)="Type dantiagregant plaquettaire (choice=Anti-Gp-IIb-IIIa (TIROFIBAN))"
+label(data$aap_type___7)="Type dantiagregant plaquettaire (choice=Cangrelor (KENGREXAL))"
+label(data$lateralite)="Lateralite"
+label(data$anticoagulant)="Anticoagulants"
+label(data$anticoagulant_type___1)="Type danticoagulant (choice=Anticoagulant oral direct)"
+label(data$anticoagulant_type___2)="Type danticoagulant (choice=Antivitamine K)"
+label(data$anticoagulant_type___3)="Type danticoagulant (choice=HBPM)"
+label(data$anticoagulant_type___4)="Type danticoagulant (choice=HNF)"
+label(data$francophone)="Patient.e francophone ?"
+label(data$isolement)="Isolement social ?"
+label(data$activite)="Activite"
+label(data$rankin_score)="Score modifié de Rankin  0 - Pas de symptomes  1 - Symptomes sans handicap  2 - Handicap leger : autonome  3 - Handicap modere : marche seul  4 - Handicap severe : assistance a la marche  5 - Handicap majeur : incontinent, confine au lit"
+label(data$antecedents_complete)="Complete?"
+label(data$date_symptomes)="Début des symptomes (jour et heure) Si heure complètement inconnue, renseigner 11:11"
+label(data$date_pec)="Date de la première prise en charge (premières constantes) "
+label(data$pas_initiale)="Pression arterielle systolique (mmHg)"
+label(data$pad_initiale)="Pression arterielle diastolique (mmHg)"
+label(data$pam_initiale_calculee)="Pression artérielle calculée (en mmHg)"
+label(data$fc_initiale)="Frequence cardiaque (/min)"
+label(data$spo2_initiale)="Saturation en oxygene (%)"
+label(data$temp_initiale)="Temperature (°C)"
+label(data$pas_inf_90)="Episode de PAS < 90 mmHg ?"
+label(data$spo2_inf_90)="Episode de SpO2 < 90 % ?"
+label(data$gcs_detaille)="Score de Glasgow détaillé (YVM)"
+label(data$gcs_total_prerea_admission)="Score de Glasgow total"
+label(data$gcs_yeux_initial)="Score de Glasgow - Yeux"
+label(data$gcs_verbal_initial)="Score de Glasgow - Verbal"
+label(data$gcs_moteur_initial)="Score de Glasgow - Moteur"
+label(data$gcs_total_detail_admission)="Score de Glasgow total"
+label(data$convulsions_initial)="Convulsions"
+label(data$pupille_gauche_admission_v2)="Pupille gauche"
+label(data$pupille_droite_admission_v2)="Pupille droite"
+label(data$dtc_initial_fait)="Doppler transcraniens faits ?"
+label(data$bf_dtc_initial)="Backflow au Doppler ?"
+label(data$bf_dtc_initial_cote___1)="Localisation du backflow ? (choice=Gauche)"
+label(data$bf_dtc_initial_cote___2)="Localisation du backflow ? (choice=Droit)"
+label(data$dtc_g_initial)="Doppler transcraniens gauche faisables ?"
+label(data$dtc_g_vs_initial)="Vitesse systolique (cm/s)"
+label(data$dtc_g_vd_initial)="Vitesse diastolique (cm/s)"
+label(data$dtc_g_ip_initial)="Index de pulsatilite"
+label(data$dtc_d_initial)="Doppler transcraniens droit faisables ?"
+label(data$dtc_d_vs_initial)="Vitesse systolique (cm/s)"
+label(data$dtc_d_vd_initial)="Vitesse diastolique (cm/s)"
+label(data$dtc_d_ip_initial)="Index de pulsatilite"
+label(data$imagerie_prerea)="Imagerie avant le transfert en reanimation"
+label(data$imagerie_prerea_type___1)="Type dimagerie (choice=TDM)"
+label(data$imagerie_prerea_type___2)="Type dimagerie (choice=IRM)"
+label(data$imagerie_prerea_injection)="Imagerie injectee"
+label(data$malformation_vasculaire)="Malformation vasculaire"
+label(data$malformation_vasculaire_type___1)="Type de malformation vasculaire (choice=Anevrysme arteriel)"
+label(data$malformation_vasculaire_type___2)="Type de malformation vasculaire (choice=Malformation arterio-veineuse)"
+label(data$malformation_vasculaire_type___3)="Type de malformation vasculaire (choice=Fistule durale)"
+label(data$osmo_prerea)="Osmotherapie"
+label(data$osmo_prerea_indication___1)="Indication de losmotherapie (choice=Anomalie pupillaire)"
+label(data$osmo_prerea_indication___2)="Indication de losmotherapie (choice=Doppler pathologiques)"
+label(data$osmo_prerea_indication___3)="Indication de losmotherapie (choice=Degradation neurologique rapide)"
+label(data$osmo_prerea_type___1)="Soluté dosmotherapie (choice=Mannitol)"
+label(data$osmo_prerea_type___2)="Soluté dosmotherapie (choice=Serum sale hypertonique)"
+label(data$osmo_prerea_efficace)="Regression de lanomalie pupillaire apres losmotherapie ?"
+label(data$intubation_prerea)="Intubation"
+label(data$etco2_dispo)="EtCO2 disponible ?"
+label(data$etco2_prerea)="Premier EtCO2 apres intubation (mmHg)"
+label(data$norad_prerea)="Noradrenaline"
+label(data$norad_prerea_indication)="Indication de la Noradrenaline"
+label(data$acr_prehosp)="Arret cardiaque prehospitalier"
+label(data$prise_en_charge_avant_la_reanimation_complete)="Complete?"
+label(data$date_admission)="Admission en reanimation / USC / SSPI (date et heure)"
+label(data$mode_admission)="Mode dadmission"
+label(data$admission_ggnc_pdses)="Type dadmission"
+label(data$pas_admission)="Pression arterielle systolique (mmHg)"
+label(data$pad_admission)="Pression arterielle diastolique (mmHg)"
+label(data$pam_admission)="Pression arterielle moyenne (mmHg)"
+label(data$pam_admission_calculee)="Pression arterielle moyenne calculée (mmHg)"
+label(data$fc_admission)="Frequence cardiaque (/min)"
+label(data$spo2_admission)="Saturation en oxygene (%)"
+label(data$temp_admission)="Temperature (en °C)"
+label(data$sedation_admission)="Malade sedate"
+label(data$convulsions_admission)="Convulsions"
+label(data$gcs_yeux_admission)="Score de Glasgow à ladmission - Yeux"
+label(data$gcs_verbal_admission)="Score de Glasgow à ladmission - Verbal"
+label(data$gcs_moteur_admission)="Score de Glasgow à ladmission - Moteur"
+label(data$gcs_total_admission)="Score de Glasgow total à ladmission"
+label(data$gcs_yeux_pire_24_heures)="Score de Glasgow le plus bas des 24 premières heures (en dehors de lintubation) - Yeux"
+label(data$gcs_verbal_pire_24_heures)="Score de Glasgow le plus bas des 24 premières heures (en dehors de lintubation)  - Verbal"
+label(data$gcs_moteur_pire_24_heures)="Score de Glasgow le plus bas des 24 premières heures (en dehors de lintubation)  - Moteur"
+label(data$gcs_total_pire_24_heures)="Score de Glasgow total le plus bas des 24 premières heures (en dehors de lintubation) "
+label(data$pupille_gauche_admission)="Pupille gauche"
+label(data$pupille_droite_admission)="Pupille droite"
+label(data$react_pupille_g)="Reactivite pupillaire gauche"
+label(data$react_pupille_d)="Reactivite pupillaire droite"
+label(data$dtc_admission)="Doppler transcraniens faits"
+label(data$dtc_g_admission)="Fenêtre gauche disponible"
+label(data$dtc_g_vs_admission)="Vitesse systolique (cm/s)"
+label(data$dtc_g_vd_admission)="Vitesse diastolique (cm/s)"
+label(data$dtc_g_ip_admission)="Index de pulsatilite"
+label(data$dtc_d_admission)="Fenêtre droite disponible"
+label(data$dtc_d_vs_admission)="Vitesse systolique (cm/s)"
+label(data$dtc_d_vd_admission)="Vitesse diastolique (cm/s)"
+label(data$dtc_d_ip_admission)="Index de pulsatilite"
+label(data$imagerie_rea_24_heures)="Imagerie dans le centre dinclusion dans les 24 premieres heures"
+label(data$imagerie_rea_type___1)="Type dimagerie (choice=TDM)"
+label(data$imagerie_rea_type___2)="Type dimagerie (choice=IRM)"
+label(data$imagerie_rea_injection)="Imagerie injectee"
+label(data$osmo_rea)="Osmotherapie"
+label(data$osmo_rea_indication)="Indication de losmotherapie"
+label(data$osmo_rea_type)="Solute dosmotherapie"
+label(data$osmo_rea_efficace)="Regression de lanomalie pupillaire apres losmotherapie ?"
+label(data$intubation_rea)="Intubation"
+label(data$etco2_rea)="Premier EtCO2 apres intubation (mmHg)"
+label(data$norad_rea)="Noradrenaline"
+label(data$norad_rea_indication)="Indication de la Noradrenaline"
+label(data$diagnostic)="Diagnostic retenu"
+label(data$prise_en_charge_initiale_complete)="Complete?"
+label(data$mecanisme_trauma)="Mecanisme du traumatisme"
+label(data$trauma_chute_6m)="Chute de plus de 6 mètres ?"
+label(data$trauma_penetrant)="Trauma penetrant"
+label(data$mecanisme_trauma_texte)="Autre : renseignez le mécanisme du trauma"
+label(data$trauma_lesions_scan___1)="Lesions scannographiques  Noter les pires lesions des premieres 24 heures (choice=Hematome sous-dural)"
+label(data$trauma_lesions_scan___2)="Lesions scannographiques  Noter les pires lesions des premieres 24 heures (choice=Hematome extra-dural)"
+label(data$trauma_lesions_scan___3)="Lesions scannographiques  Noter les pires lesions des premieres 24 heures (choice=Hematome intra-parenchymateux)"
+label(data$trauma_lesions_scan___4)="Lesions scannographiques  Noter les pires lesions des premieres 24 heures (choice=Petechie.s parenchymateuse.s)"
+label(data$trauma_lesions_scan___5)="Lesions scannographiques  Noter les pires lesions des premieres 24 heures (choice=Hemorragie meningee)"
+label(data$trauma_lesions_scan___6)="Lesions scannographiques  Noter les pires lesions des premieres 24 heures (choice=Hydrocephalie)"
+label(data$trauma_lesions_scan___7)="Lesions scannographiques  Noter les pires lesions des premieres 24 heures (choice=Contusion.s parenchymateuse.s)"
+label(data$tcdb_scan_classe)="Classification scannographique des lesions Renseigner un chiffre de 1 à 6 Coter les pires lesions des 24 premieres heures avant chirurgie 1 : normal 2 : lesions diffuses sans compression 3 : lesions diffuses avec compression (oedeme) 4 : lesions diffuses avec déviation > 5mm 5 : lesion(s) focale(s) (> 25 cm3) evacuees chirurgicalement 6 : lesion(s) focale(s) (> 25 cm3) non evacuees chirurgicalement"
+label(data$trauma_vasospasme)="Vasospasme confirme a larteriographie"
+label(data$trauma_lesions_associees)="Lésions traumatiques extra-crâniennes associées ?"
+label(data$trauma_hemorragie_intervention)="Lésion hémorragique nécessitant un geste hémostatique ?"
+label(data$trauma_type_hemostase___1)="Type dintervention hémostatique (choice=Radiologie interventionnelle)"
+label(data$trauma_type_hemostase___2)="Type dintervention hémostatique (choice=Chirurgie)"
+label(data$trauma_transfusion_2_cgr)="Transfusion > 2 CGR dans les 24 premières heures ?"
+label(data$trauma_medullaire)="Traumatisme médullaire associée ?"
+label(data$traumatisme_cranien_complete)="Complete?"
+label(data$hsa_perte_conscience)="Perte de connaissance initiale ?"
+label(data$hsa_wfns)="Echelle WFNS   GradeGCSDéficit moteur 115Non 213-14Non 313-14Oui 47-12Oui ou Non 53-6Oui ou Non "
+label(data$hsa_fisher_modifiee)="Echelle de Fisher modifiée (0-4)   GradeImagerie 0Pas dHSA visible 1HSA minime, pas dHIV 2HSA minime, HIV presente 3HSA importante, pas dHIV bilaterale 4HSA importante, HIV bilaterale   HSA importante : une citerne ou une scissure totalement inondee HIV bilaterale : les deux ventricules lateraux"
+label(data$hsa_anevrysme)="Anevrysme"
+label(data$hsa_anevrysme_mav)="Anevrysme dans le cadre dune MAV"
+label(data$hsa_anevrysme_localisation)="Localisation de lanevrysme  En cas danévrysmes multiples, ne renseigner que celui à lorigine de lHSA."
+label(data$hsa_anevrysme_cote)="Lateralite de lanevrysme"
+label(data$hsa_anevrysme_traitement)="Traitement de lanevrysme"
+label(data$hsa_anevrysme_traitement_type)="Type de traitement de lanevrysme"
+label(data$hsa_anevrysme_complication)="Complication ?"
+label(data$hsa_anevrysme_compli_type___1)="Type de complication (choice=Débord de coil)"
+label(data$hsa_anevrysme_compli_type___2)="Type de complication (choice=Occlusion vasculaire)"
+label(data$hsa_anevrysme_compli_type___3)="Type de complication (choice=Dissection)"
+label(data$hsa_anevrysme_compli_type___4)="Type de complication (choice=Rupture)"
+label(data$hsa_anevrysme_compli_type___5)="Type de complication (choice=Resaignement)"
+label(data$hsa_anevrysme_traitement_heure)="Date du traitement de lanevrysme"
+label(data$hsa_anevrysme_nimodipine)="Traitement par Nimodipine"
+label(data$hsa_anevrysme_statine)="Traitement par statine"
+label(data$hsa_dysfonction_cardiaque)="Dysfonction cardiaque aigue ?"
+label(data$hsa_fevg)="Fraction dejection ventriculaire gauche minimale"
+label(data$hsa_dysf_card_inotrope)="Inotrope suite à la dysfonction cardiaque"
+label(data$hsa_vasospasme)="Vasospasme"
+label(data$hsa_vasospasme_dg_date)="Date du diagnostic du vasospasme"
+label(data$hsa_vasospasme_dg_type___1)="Diagnostic du vasospasme  (plusieurs réponses possibles) (choice=Deficit neurologique)"
+label(data$hsa_vasospasme_dg_type___2)="Diagnostic du vasospasme  (plusieurs réponses possibles) (choice=Doppler transcranien)"
+label(data$hsa_vasospasme_dg_type___3)="Diagnostic du vasospasme  (plusieurs réponses possibles) (choice=TDM injectee)"
+label(data$hsa_vasospasme_dg_type___4)="Diagnostic du vasospasme  (plusieurs réponses possibles) (choice=Arteriographie)"
+label(data$hsa_vasospasme_dtc_vm)="Vitesse moyenne maximale de lACM au Doppler lors du diagnostic (cm/s)"
+label(data$hsa_vasospasme_traitement)="Traitement du vasospasme"
+label(data$hsa_vasospasme_traitement_type___1)="Type de traitement du vasospasme (plusieurs réponses possibles) (choice=Expansion volemique)"
+label(data$hsa_vasospasme_traitement_type___2)="Type de traitement du vasospasme (plusieurs réponses possibles) (choice=Hypertension arterielle induite)"
+label(data$hsa_vasospasme_traitement_type___3)="Type de traitement du vasospasme (plusieurs réponses possibles) (choice=Inodilatateur (milrinone))"
+label(data$hsa_vasospasme_traitement_type___4)="Type de traitement du vasospasme (plusieurs réponses possibles) (choice=Inotrope (dobutamine))"
+label(data$hsa_vasospasme_traitement_type___5)="Type de traitement du vasospasme (plusieurs réponses possibles) (choice=Dilatation chimique interventionnelle)"
+label(data$hsa_vasospasme_traitement_type___6)="Type de traitement du vasospasme (plusieurs réponses possibles) (choice=Dilatation mecanique interventionnelle)"
+label(data$hsa_vasospasme_territoire___1)="Territoire spasme (choice=Territoire anterieur)"
+label(data$hsa_vasospasme_territoire___2)="Territoire spasme (choice=Territoire sylvien)"
+label(data$hsa_vasospasme_territoire___3)="Territoire spasme (choice=Territoire posterieur)"
+label(data$hsa_vasospasme_lateralite___1)="Lateralite du vasopasme (choice=Gauche)"
+label(data$hsa_vasospasme_lateralite___2)="Lateralite du vasopasme (choice=Droit)"
+label(data$hemorragie_meningee_complete)="Complete?"
+label(data$hip_cause)="Cause de lhemorragie intracerebrale"
+label(data$hip_cause_autre)="Cause autre de lAVC hémorragique"
+label(data$hiv)="Hemorragie intraventriculaire associee ?"
+label(data$hip_localisation___1)="Localisation de lhématome ? (choice=Supra-tentorielle)"
+label(data$hip_localisation___2)="Localisation de lhématome ? (choice=Infra-tentorielle)"
+label(data$hip_localisation___3)="Localisation de lhématome ? (choice=Profond)"
+label(data$hip_localisation___4)="Localisation de lhématome ? (choice=Lobaire)"
+label(data$hip_taille_30ml)="Taille de lhematome > 30mL ?  Formule de calcul :  A x B x C / 2 "
+label(data$hip_taille_ml)="Volume de lhématome en mL"
+label(data$accident_vasculaire_cerebral_hemorragique_complete)="Complete?"
+label(data$aic_localisation___0)="Territoire de laccident vasculaire ischemique (choice=Carotidien)"
+label(data$aic_localisation___1)="Territoire de laccident vasculaire ischemique (choice=Anterieur)"
+label(data$aic_localisation___2)="Territoire de laccident vasculaire ischemique (choice=Sylvien superficiel)"
+label(data$aic_localisation___3)="Territoire de laccident vasculaire ischemique (choice=Sylvien profond)"
+label(data$aic_localisation___4)="Territoire de laccident vasculaire ischemique (choice=Posterieur)"
+label(data$aic_localisation___5)="Territoire de laccident vasculaire ischemique (choice=Cerebelleux)"
+label(data$aic_localisation___6)="Territoire de laccident vasculaire ischemique (choice=Tronc cerebral)"
+label(data$aic_localisation___7)="Territoire de laccident vasculaire ischemique (choice=Autre)"
+label(data$aic_localisation_texte)="Autre : specifiez la localisation"
+label(data$aic_lateralite___1)="Lateralite de laccident vasculaire ischemique (choice=Gauche)"
+label(data$aic_lateralite___2)="Lateralite de laccident vasculaire ischemique (choice=Droit)"
+label(data$aic_cause)="Cause de laccident vasculaire cérébral ischémique"
+label(data$aic_cause_autre)="Autre : spécifiez la cause de lAIC"
+label(data$aic_nihss)="Score NIHSS initial (0 - 42)"
+label(data$aic_thrombolyse)="Thrombolyse"
+label(data$aic_thrombectomie)="Thrombectomie"
+label(data$thrombectomie_anesthesie)="Modalite danesthesie"
+label(data$aic_thrombectomie_heure_ponction)="Heure de la ponction arterielle"
+label(data$aic_thrombectomie_revasc)="Repermeabilisation ?"
+label(data$aic_thrombectomie_tici)="Score TICI (0-3)  Se référer au CR de NRI pour obtenir le score"
+label(data$aic_thrombectomie_revasc_heure)="Heure de la repermeabilisation"
+label(data$aic_stent)="Pose de stent"
+label(data$aic_stent_localisation___1)="Localisation du stent (choice=Artère cérébrale moyenne)"
+label(data$aic_stent_localisation___2)="Localisation du stent (choice=Artère carotide)"
+label(data$aic_stent_localisation___3)="Localisation du stent (choice=Tronc basilaire)"
+label(data$aic_stent_localisation___4)="Localisation du stent (choice=Artère vertébrale)"
+label(data$aic_stent_localisation___5)="Localisation du stent (choice=Autre)"
+label(data$aic_stent_loca_autre)="Spécifiez la localisation"
+label(data$aic_nri_complication)="Complications de la NRI ?"
+label(data$aic_nri_complication_type___1)="Type de complication (choice=Migration embolique)"
+label(data$aic_nri_complication_type___2)="Type de complication (choice=Occlusion dun stent)"
+label(data$aic_nri_complication_type___3)="Type de complication (choice=Hemorragie per-procedure)"
+label(data$aic_nri_complication_type___4)="Type de complication (choice=Hemorragie au point de ponction)"
+label(data$aic_nri_complication_type___5)="Type de complication (choice=Spasme arteriel)"
+label(data$aic_nri_complication_type___6)="Type de complication (choice=Troubles du rythme cardiaque)"
+label(data$aic_nri_complication_type___7)="Type de complication (choice=Faux-anevrysme arteriel)"
+label(data$aic_complication)="Complication de lAIC ?"
+label(data$aic_complication_type___1)="Type de complication (choice=Récidive ischémique)"
+label(data$aic_complication_type___2)="Type de complication (choice=Transformation hémorragique)"
+label(data$accident_vasculaire_ischemique_complete)="Complete?"
+label(data$capteur_pic)="Pose dun capteur de PIC"
+label(data$capteur_pic_date)="Date de la pose du capteur de PIC"
+label(data$htic)="Hypertension intracranienne ?  Repondre oui si lhypertension intracranienne a ete a lorigine dun traitement medical ou chirurgical."
+label(data$htic_pic_max)="Valeur maximale de la PIC (premiere semaine)  Ne prendre que les valeurs au repos et maintenues plus de 5 minutes"
+label(data$htic_traitement___1)="Traitement de lhypertension intracrânienne (choice=Sedation)"
+label(data$htic_traitement___2)="Traitement de lhypertension intracrânienne (choice=Curarisation)"
+label(data$htic_traitement___3)="Traitement de lhypertension intracrânienne (choice=Normothermie active)"
+label(data$htic_traitement___4)="Traitement de lhypertension intracrânienne (choice=Hypothermie therapeutique)"
+label(data$htic_traitement___5)="Traitement de lhypertension intracrânienne (choice=Derivation ventriculaire externe)"
+label(data$htic_traitement___11)="Traitement de lhypertension intracrânienne (choice=Dérivation lombaire externe)"
+label(data$htic_traitement___6)="Traitement de lhypertension intracrânienne (choice=Craniectomie decompressive)"
+label(data$htic_traitement___7)="Traitement de lhypertension intracrânienne (choice=Suppression metabolique)"
+label(data$htic_traitement___8)="Traitement de lhypertension intracrânienne (choice=Osmotherapie)"
+label(data$htic_traitement___9)="Traitement de lhypertension intracrânienne (choice=Hypocapnie permissive)"
+label(data$htic_traitement___10)="Traitement de lhypertension intracrânienne (choice=Autre)"
+label(data$htic_traitement_hypnotique___1)="Type de sedatif utilise (choice=Midazolam)"
+label(data$htic_traitement_hypnotique___2)="Type de sedatif utilise (choice=Ketamine)"
+label(data$htic_traitement_hypnotique___3)="Type de sedatif utilise (choice=Propofol)"
+label(data$htic_traitement_hypnotique___4)="Type de sedatif utilise (choice=Thiopental)"
+label(data$htic_traitement_curare___1)="Type de curare utilise (choice=Atracurium)"
+label(data$htic_traitement_curare___2)="Type de curare utilise (choice=Cisatracurium)"
+label(data$htic_traitement_curare___3)="Type de curare utilise (choice=Rocuronium)"
+label(data$htic_traitement_temp_cible)="Temperature cible"
+label(data$htic_traitement_dve_date)="Date de pose de la derivation ventriculaire externe"
+label(data$htic_traitement_craniec_date)="Date de la craniectomie decompressive"
+label(data$htic_traitement_burst_type)="Type dhypnotique utilise pour la suppression metabolique"
+label(data$htic_traitement_texte)="Autre : specifiez le type de traitement"
+label(data$htic_traitement_autre_txt)="Renseigner la thérapeutique de lHTIC"
+label(data$corticoides)="Traitement par corticoïdes ?"
+label(data$monitorage_tcd)="Doppler transcraniens en reanimation  Oui si au moins un Doppler par jour pendant les 5 premiers jours de lhospitalisation en reanimation"
+label(data$dtc_bf_rea)="Backflow en réanimation ?"
+label(data$tcd_vd_min)="Velocite diastolique minimale (cm/s)"
+label(data$dtc_ip_max)="IP maximal"
+label(data$capteur_ptio2)="Pose dun capteur de PtiO2"
+label(data$ptio2_min)="Valeur minimale de la PtiO2"
+label(data$capteur_svjo2)="Pose dun capteur de SvjO2"
+label(data$pvjo2_min)="Valeur minimale de PvjO2 (mmHg)"
+label(data$microdialyse)="Microdialyse"
+label(data$eeg_continu)="EEG continu"
+label(data$neurochirurgie)="Neurochirurgie"
+label(data$neurochirurgie_date)="Date de la neurochirurgie"
+label(data$neurochirurgie_type___1)="Type de neurochirurgie (choice=Évacuation dhématome)"
+label(data$neurochirurgie_type___2)="Type de neurochirurgie (choice=Dérivation ventriculaire externe)"
+label(data$neurochirurgie_type___7)="Type de neurochirurgie (choice=Dérivation ventriculo-péritonéale ou atriale)"
+label(data$neurochirurgie_type___3)="Type de neurochirurgie (choice=Clipping anévrysmal)"
+label(data$neurochirurgie_type___4)="Type de neurochirurgie (choice=Craniectomie décompressive hémisphérique)"
+label(data$neurochirurgie_type___6)="Type de neurochirurgie (choice=Craniectomie décompressive de fosse postérieure)"
+label(data$neurochirurgie_type___5)="Type de neurochirurgie (choice=Autre)"
+label(data$neurochirurgie_type_texte)="Autre : specifiez le type de neurochirurgie"
+label(data$neurochirurgie_nombre)="Nombre total de neurochirurgies"
+label(data$epilepsie)="Epilepsie"
+label(data$epilepsie_edme)="Etat de mal epileptique"
+label(data$epilepsie_edme_refrac)="Etat de mal refractaire"
+label(data$epilepsie_traitement___1)="Traitement anti-epileptique (choice=Fosphenytoïne (DIHYDAN))"
+label(data$epilepsie_traitement___2)="Traitement anti-epileptique (choice=Levetiracetam (KEPPRA))"
+label(data$epilepsie_traitement___3)="Traitement anti-epileptique (choice=Benzodiazepines (VALIUM, RIVOTRIL))"
+label(data$epilepsie_traitement___4)="Traitement anti-epileptique (choice=Valproate de sodium (DEPAKINE))"
+label(data$epilepsie_traitement___5)="Traitement anti-epileptique (choice=Propofol (DIPRIVAN))"
+label(data$epilepsie_traitement___6)="Traitement anti-epileptique (choice=Thiopental (PENTOTHAL))"
+label(data$epilepsie_traitement___7)="Traitement anti-epileptique (choice=Autre)"
+label(data$ventilation_rea)="Ventilation mecanique en reanimation"
+label(data$ventilation_rea_duree)="Duree totale de la ventilation mecanique (en jours)"
+label(data$infection_rea)="Infection en reanimation"
+label(data$infection_rea_precoce)="Infection précoce (< 5 jours) ?"
+label(data$infection_rea_precoce_inh)="Pneumonie dinhalation"
+label(data$infection_rea_precoce_texte)="Infection precoce : precisez le type dinfection"
+label(data$infection_rea_tardive)="Infection tardive (>5 jours) ?"
+label(data$infection_rea_tard_type___1)="Infection tardive (choice=Pneumonie)"
+label(data$infection_rea_tard_type___2)="Infection tardive (choice=Infection de site operatoire)"
+label(data$infection_rea_tard_type___3)="Infection tardive (choice=Meningo-ventriculite)"
+label(data$infection_rea_tard_type___4)="Infection tardive (choice=Infection de catheter)"
+label(data$infection_rea_tard_type___5)="Infection tardive (choice=Autre)"
+label(data$infection_rea_tard_texte)="Autre : precisez le type dinfection "
+label(data$infection_rea_choc)="Choc septique"
+label(data$sedation_rea)="Sedation en reanimation"
+label(data$sedation_rea_date)="Date de debut de la sedation"
+label(data$sedation_rea_duree)="Duree totale de la sedation (en jours)"
+label(data$sedation_rea_type___1)="Type de sedation (choice=Midazolam)"
+label(data$sedation_rea_type___2)="Type de sedation (choice=Ketamine)"
+label(data$sedation_rea_type___3)="Type de sedation (choice=Propofol)"
+label(data$sedation_rea_type___4)="Type de sedation (choice=Dexmedetomidine)"
+label(data$sedation_rea_type___5)="Type de sedation (choice=Clonidine)"
+label(data$trachetomie)="Tracheotomie"
+label(data$tbes_deglutition)="Troubles de la déglutition"
+label(data$gpe)="Gastrostomie percutanee"
+label(data$na_min)="Natremie minimale (mmol/L)"
+label(data$na_max)="Natremie maximale (mmol/L)"
+label(data$lata)="Limitation des therapeutiques actives"
+label(data$ata)="Arret des therapeutiques actives"
+label(data$deces_rea)="Deces en reanimation"
+label(data$deces_date)="Date de deces"
+label(data$edme)="Passage en etat de mort encephalique"
+label(data$edme_date)="Date de passage en etat de mort encephalique"
+label(data$sortie_date)="Date de sortie de réanimation"
+label(data$pmo)="Prelevement dorgane"
+label(data$pmo_maastricht)="Contexte du prelevement"
+label(data$edme_confirmation)="Modalite de confirmation de letat de mort encephalique"
+label(data$prise_en_charge_en_reanimation_complete)="Complete?"
+label(data$sortie_rea)="Destination a la sortie de la reanimation"
+label(data$sortie_rea_texte)="Destination a la sortie de la reanimation Autre : precisez le lieu de sortie"
+label(data$ouverture_yeux)="Ouverture des yeux ?"
+label(data$ouverture_yeux_date)="Date douverture des yeux "
+label(data$etat_conscience)="Etat de conscience a la sortie ?"
+label(data$crsr)="Evaluation par CRSR ?"
+label(data$crsr_premier)="Premier score CRSR disponible (Min 0 ; Max 23)"
+label(data$crsr_premier_date)="Date du premier CRSR"
+label(data$crsr_sortie)="Score CRSR à la sortie de réanimation"
+label(data$gcs_sortie)="Score de Glasgow à la sortie de réanimation"
+label(data$gos_sortie)="Score  GOS à la sortie de reanimation (Min 1 ; Max 5)  "
+label(data$gose_sortie)="Score  GOS-E à la sortie de reanimation (Min 1 ; Max 8)"
+label(data$goat_sortie)="Score  de GOAT à la sortie de reanimation (Min 0 ; Max 100)  "
+label(data$drs_sortie)="Score DRS à la sortie de réanimation [0-29]"
+label(data$eval_distance)="Evaluation a distance"
+label(data$evaluation_distance_date)="Date de la dernière évaluation"
+label(data$evaluation_distance_deces)="Patient vivant lors de levaluation"
+label(data$evaluation_distance_rad)="Retour à domicile"
+label(data$evaluation_distance_pec_spe)="Prise en charge en rééducation spécialisée"
+label(data$eval_distance_score___1)="Score(s) utilise(s) pour levaluation  mRs : Modified Ranking Scale GOS : Glasgow Outcome Scale GOSE : Glasgow Outcome Scale Extended DRS : Disability Rating Scale RiverMead : RiverMead Mobility Score (choice=mRS)"
+label(data$eval_distance_score___5)="Score(s) utilise(s) pour levaluation  mRs : Modified Ranking Scale GOS : Glasgow Outcome Scale GOSE : Glasgow Outcome Scale Extended DRS : Disability Rating Scale RiverMead : RiverMead Mobility Score (choice=GOS)"
+label(data$eval_distance_score___2)="Score(s) utilise(s) pour levaluation  mRs : Modified Ranking Scale GOS : Glasgow Outcome Scale GOSE : Glasgow Outcome Scale Extended DRS : Disability Rating Scale RiverMead : RiverMead Mobility Score (choice=GOSE)"
+label(data$eval_distance_score___3)="Score(s) utilise(s) pour levaluation  mRs : Modified Ranking Scale GOS : Glasgow Outcome Scale GOSE : Glasgow Outcome Scale Extended DRS : Disability Rating Scale RiverMead : RiverMead Mobility Score (choice=DRS)"
+label(data$eval_distance_score___6)="Score(s) utilise(s) pour levaluation  mRs : Modified Ranking Scale GOS : Glasgow Outcome Scale GOSE : Glasgow Outcome Scale Extended DRS : Disability Rating Scale RiverMead : RiverMead Mobility Score (choice=Rivermead)"
+label(data$eval_distance_score___4)="Score(s) utilise(s) pour levaluation  mRs : Modified Ranking Scale GOS : Glasgow Outcome Scale GOSE : Glasgow Outcome Scale Extended DRS : Disability Rating Scale RiverMead : RiverMead Mobility Score (choice=Autre)"
+label(data$eval_distance_score_mrs)="Score mRs"
+label(data$eval_distance_score_gos)="Score  GOS   "
+label(data$eval_distance_score_gose)="Score GOS-E"
+label(data$eval_distance_score_drs)="Score DRS"
+label(data$eval_distance_score_rm)="Score Rivermead"
+label(data$eval_distance_score_texte)="Score utilise pour levaluation Autre : precisez le score et sa valeur"
+label(data$donnees_a_la_suite_de_la_reanimation_complete)="Complete?"
+#Setting Units
+
+
+#Setting Factors(will create new variable for factors)
+data$redcap_data_access_group.factor = factor(data$redcap_data_access_group,levels=c("beaujon","bicetre","henri_mondor","lariboisire","pitisalptrire"))
+data$criteres_inclusion___1.factor = factor(data$criteres_inclusion___1,levels=c("0","1"))
+data$criteres_inclusion___2.factor = factor(data$criteres_inclusion___2,levels=c("0","1"))
+data$criteres_inclusion___3.factor = factor(data$criteres_inclusion___3,levels=c("0","1"))
+data$criteres_inclusion___4.factor = factor(data$criteres_inclusion___4,levels=c("0","1"))
+data$centre_inclusion.factor = factor(data$centre_inclusion,levels=c("BCT","LRB","BJN","PS","HM"))
+data$traumabase.factor = factor(data$traumabase,levels=c("1","0"))
+data$sex.factor = factor(data$sex,levels=c("1","2","3"))
+data$femme_peripartum.factor = factor(data$femme_peripartum,levels=c("1","0"))
+data$more_than_2_years_old.factor = factor(data$more_than_2_years_old,levels=c("1","0"))
+data$ieyn.factor = factor(data$ieyn,levels=c("1","0"))
+data$donnes_dmographiques_aphp_complete.factor = factor(data$donnes_dmographiques_aphp_complete,levels=c("0","1","2"))
+data$hta.factor = factor(data$hta,levels=c("1","0","2"))
+data$hta_traitement.factor = factor(data$hta_traitement,levels=c("1","0"))
+data$diabete.factor = factor(data$diabete,levels=c("1","2","3","4","5"))
+data$tabac.factor = factor(data$tabac,levels=c("1","2","3"))
+data$intox_chronique___1.factor = factor(data$intox_chronique___1,levels=c("0","1"))
+data$intox_chronique___2.factor = factor(data$intox_chronique___2,levels=c("0","1"))
+data$intox_chronique___3.factor = factor(data$intox_chronique___3,levels=c("0","1"))
+data$intox_chronique___4.factor = factor(data$intox_chronique___4,levels=c("0","1"))
+data$intox_chronique___5.factor = factor(data$intox_chronique___5,levels=c("0","1"))
+data$intox_aigue___1.factor = factor(data$intox_aigue___1,levels=c("0","1"))
+data$intox_aigue___2.factor = factor(data$intox_aigue___2,levels=c("0","1"))
+data$intox_aigue___3.factor = factor(data$intox_aigue___3,levels=c("0","1"))
+data$intox_aigue___4.factor = factor(data$intox_aigue___4,levels=c("0","1"))
+data$intox_aigue___5.factor = factor(data$intox_aigue___5,levels=c("0","1"))
+data$aap.factor = factor(data$aap,levels=c("1","0"))
+data$aap_type___1.factor = factor(data$aap_type___1,levels=c("0","1"))
+data$aap_type___2.factor = factor(data$aap_type___2,levels=c("0","1"))
+data$aap_type___3.factor = factor(data$aap_type___3,levels=c("0","1"))
+data$aap_type___4.factor = factor(data$aap_type___4,levels=c("0","1"))
+data$aap_type___5.factor = factor(data$aap_type___5,levels=c("0","1"))
+data$aap_type___6.factor = factor(data$aap_type___6,levels=c("0","1"))
+data$aap_type___7.factor = factor(data$aap_type___7,levels=c("0","1"))
+data$lateralite.factor = factor(data$lateralite,levels=c("1","2","3","4"))
+data$anticoagulant.factor = factor(data$anticoagulant,levels=c("1","0"))
+data$anticoagulant_type___1.factor = factor(data$anticoagulant_type___1,levels=c("0","1"))
+data$anticoagulant_type___2.factor = factor(data$anticoagulant_type___2,levels=c("0","1"))
+data$anticoagulant_type___3.factor = factor(data$anticoagulant_type___3,levels=c("0","1"))
+data$anticoagulant_type___4.factor = factor(data$anticoagulant_type___4,levels=c("0","1"))
+data$francophone.factor = factor(data$francophone,levels=c("1","0"))
+data$isolement.factor = factor(data$isolement,levels=c("1","0"))
+data$activite.factor = factor(data$activite,levels=c("1.","2.","3.","4.","5.","6.","7.","8.","9."))
+data$antecedents_complete.factor = factor(data$antecedents_complete,levels=c("0","1","2"))
+data$pas_inf_90.factor = factor(data$pas_inf_90,levels=c("1","0"))
+data$spo2_inf_90.factor = factor(data$spo2_inf_90,levels=c("1","0"))
+data$gcs_detaille.factor = factor(data$gcs_detaille,levels=c("1","0"))
+data$gcs_yeux_initial.factor = factor(data$gcs_yeux_initial,levels=c("1","2","3","4"))
+data$gcs_verbal_initial.factor = factor(data$gcs_verbal_initial,levels=c("1","2","3","4","5"))
+data$gcs_moteur_initial.factor = factor(data$gcs_moteur_initial,levels=c("1","2","3","4","5","6"))
+data$convulsions_initial.factor = factor(data$convulsions_initial,levels=c("1","0"))
+data$pupille_gauche_admission_v2.factor = factor(data$pupille_gauche_admission_v2,levels=c("1","2","3"))
+data$pupille_droite_admission_v2.factor = factor(data$pupille_droite_admission_v2,levels=c("1","2","3"))
+data$dtc_initial_fait.factor = factor(data$dtc_initial_fait,levels=c("1","0"))
+data$bf_dtc_initial.factor = factor(data$bf_dtc_initial,levels=c("1","0"))
+data$bf_dtc_initial_cote___1.factor = factor(data$bf_dtc_initial_cote___1,levels=c("0","1"))
+data$bf_dtc_initial_cote___2.factor = factor(data$bf_dtc_initial_cote___2,levels=c("0","1"))
+data$dtc_g_initial.factor = factor(data$dtc_g_initial,levels=c("1","0"))
+data$dtc_d_initial.factor = factor(data$dtc_d_initial,levels=c("1","0"))
+data$imagerie_prerea.factor = factor(data$imagerie_prerea,levels=c("1","0"))
+data$imagerie_prerea_type___1.factor = factor(data$imagerie_prerea_type___1,levels=c("0","1"))
+data$imagerie_prerea_type___2.factor = factor(data$imagerie_prerea_type___2,levels=c("0","1"))
+data$imagerie_prerea_injection.factor = factor(data$imagerie_prerea_injection,levels=c("1","0"))
+data$malformation_vasculaire.factor = factor(data$malformation_vasculaire,levels=c("1","0"))
+data$malformation_vasculaire_type___1.factor = factor(data$malformation_vasculaire_type___1,levels=c("0","1"))
+data$malformation_vasculaire_type___2.factor = factor(data$malformation_vasculaire_type___2,levels=c("0","1"))
+data$malformation_vasculaire_type___3.factor = factor(data$malformation_vasculaire_type___3,levels=c("0","1"))
+data$osmo_prerea.factor = factor(data$osmo_prerea,levels=c("1","0"))
+data$osmo_prerea_indication___1.factor = factor(data$osmo_prerea_indication___1,levels=c("0","1"))
+data$osmo_prerea_indication___2.factor = factor(data$osmo_prerea_indication___2,levels=c("0","1"))
+data$osmo_prerea_indication___3.factor = factor(data$osmo_prerea_indication___3,levels=c("0","1"))
+data$osmo_prerea_type___1.factor = factor(data$osmo_prerea_type___1,levels=c("0","1"))
+data$osmo_prerea_type___2.factor = factor(data$osmo_prerea_type___2,levels=c("0","1"))
+data$osmo_prerea_efficace.factor = factor(data$osmo_prerea_efficace,levels=c("1","0"))
+data$intubation_prerea.factor = factor(data$intubation_prerea,levels=c("1","0"))
+data$etco2_dispo.factor = factor(data$etco2_dispo,levels=c("1","0"))
+data$norad_prerea.factor = factor(data$norad_prerea,levels=c("1","0"))
+data$norad_prerea_indication.factor = factor(data$norad_prerea_indication,levels=c("1","2"))
+data$acr_prehosp.factor = factor(data$acr_prehosp,levels=c("1","0"))
+data$prise_en_charge_avant_la_reanimation_complete.factor = factor(data$prise_en_charge_avant_la_reanimation_complete,levels=c("0","1","2"))
+data$mode_admission.factor = factor(data$mode_admission,levels=c("1","2","3"))
+data$admission_ggnc_pdses.factor = factor(data$admission_ggnc_pdses,levels=c("1","2","3"))
+data$sedation_admission.factor = factor(data$sedation_admission,levels=c("1","0"))
+data$convulsions_admission.factor = factor(data$convulsions_admission,levels=c("1","0"))
+data$gcs_yeux_admission.factor = factor(data$gcs_yeux_admission,levels=c("1","2","3","4"))
+data$gcs_verbal_admission.factor = factor(data$gcs_verbal_admission,levels=c("1","2","3","4","5"))
+data$gcs_moteur_admission.factor = factor(data$gcs_moteur_admission,levels=c("1","2","3","4","5","6"))
+data$gcs_yeux_pire_24_heures.factor = factor(data$gcs_yeux_pire_24_heures,levels=c("1","2","3","4"))
+data$gcs_verbal_pire_24_heures.factor = factor(data$gcs_verbal_pire_24_heures,levels=c("1","2","3","4","5"))
+data$gcs_moteur_pire_24_heures.factor = factor(data$gcs_moteur_pire_24_heures,levels=c("1","2","3","4","5","6"))
+data$pupille_gauche_admission.factor = factor(data$pupille_gauche_admission,levels=c("1","2","3"))
+data$pupille_droite_admission.factor = factor(data$pupille_droite_admission,levels=c("1","2","3"))
+data$react_pupille_g.factor = factor(data$react_pupille_g,levels=c("1","0"))
+data$react_pupille_d.factor = factor(data$react_pupille_d,levels=c("1","0"))
+data$dtc_admission.factor = factor(data$dtc_admission,levels=c("1","0"))
+data$dtc_g_admission.factor = factor(data$dtc_g_admission,levels=c("1","0"))
+data$dtc_d_admission.factor = factor(data$dtc_d_admission,levels=c("1","0"))
+data$imagerie_rea_24_heures.factor = factor(data$imagerie_rea_24_heures,levels=c("1","0"))
+data$imagerie_rea_type___1.factor = factor(data$imagerie_rea_type___1,levels=c("0","1"))
+data$imagerie_rea_type___2.factor = factor(data$imagerie_rea_type___2,levels=c("0","1"))
+data$imagerie_rea_injection.factor = factor(data$imagerie_rea_injection,levels=c("1","0"))
+data$osmo_rea.factor = factor(data$osmo_rea,levels=c("1","0"))
+data$osmo_rea_indication.factor = factor(data$osmo_rea_indication,levels=c("1","2"))
+data$osmo_rea_type.factor = factor(data$osmo_rea_type,levels=c("1","2"))
+data$osmo_rea_efficace.factor = factor(data$osmo_rea_efficace,levels=c("1","0"))
+data$intubation_rea.factor = factor(data$intubation_rea,levels=c("1","0"))
+data$norad_rea.factor = factor(data$norad_rea,levels=c("1","0"))
+data$norad_rea_indication.factor = factor(data$norad_rea_indication,levels=c("1","2"))
+data$diagnostic.factor = factor(data$diagnostic,levels=c("1","2","3","4","5","6"))
+data$prise_en_charge_initiale_complete.factor = factor(data$prise_en_charge_initiale_complete,levels=c("0","1","2"))
+data$mecanisme_trauma.factor = factor(data$mecanisme_trauma,levels=c("1","2","3","4","5"))
+data$trauma_chute_6m.factor = factor(data$trauma_chute_6m,levels=c("1","0"))
+data$trauma_penetrant.factor = factor(data$trauma_penetrant,levels=c("1","0"))
+data$trauma_lesions_scan___1.factor = factor(data$trauma_lesions_scan___1,levels=c("0","1"))
+data$trauma_lesions_scan___2.factor = factor(data$trauma_lesions_scan___2,levels=c("0","1"))
+data$trauma_lesions_scan___3.factor = factor(data$trauma_lesions_scan___3,levels=c("0","1"))
+data$trauma_lesions_scan___4.factor = factor(data$trauma_lesions_scan___4,levels=c("0","1"))
+data$trauma_lesions_scan___5.factor = factor(data$trauma_lesions_scan___5,levels=c("0","1"))
+data$trauma_lesions_scan___6.factor = factor(data$trauma_lesions_scan___6,levels=c("0","1"))
+data$trauma_lesions_scan___7.factor = factor(data$trauma_lesions_scan___7,levels=c("0","1"))
+data$trauma_vasospasme.factor = factor(data$trauma_vasospasme,levels=c("1","0"))
+data$trauma_lesions_associees.factor = factor(data$trauma_lesions_associees,levels=c("1","0"))
+data$trauma_hemorragie_intervention.factor = factor(data$trauma_hemorragie_intervention,levels=c("1","0"))
+data$trauma_type_hemostase___1.factor = factor(data$trauma_type_hemostase___1,levels=c("0","1"))
+data$trauma_type_hemostase___2.factor = factor(data$trauma_type_hemostase___2,levels=c("0","1"))
+data$trauma_transfusion_2_cgr.factor = factor(data$trauma_transfusion_2_cgr,levels=c("1","0"))
+data$trauma_medullaire.factor = factor(data$trauma_medullaire,levels=c("1","0"))
+data$traumatisme_cranien_complete.factor = factor(data$traumatisme_cranien_complete,levels=c("0","1","2"))
+data$hsa_perte_conscience.factor = factor(data$hsa_perte_conscience,levels=c("1","0"))
+data$hsa_anevrysme.factor = factor(data$hsa_anevrysme,levels=c("1","0"))
+data$hsa_anevrysme_mav.factor = factor(data$hsa_anevrysme_mav,levels=c("1","0"))
+data$hsa_anevrysme_localisation.factor = factor(data$hsa_anevrysme_localisation,levels=c("1","2","3","4","5","6","7","8"))
+data$hsa_anevrysme_cote.factor = factor(data$hsa_anevrysme_cote,levels=c("1","2"))
+data$hsa_anevrysme_traitement.factor = factor(data$hsa_anevrysme_traitement,levels=c("1","0"))
+data$hsa_anevrysme_traitement_type.factor = factor(data$hsa_anevrysme_traitement_type,levels=c("1","2"))
+data$hsa_anevrysme_complication.factor = factor(data$hsa_anevrysme_complication,levels=c("1","0"))
+data$hsa_anevrysme_compli_type___1.factor = factor(data$hsa_anevrysme_compli_type___1,levels=c("0","1"))
+data$hsa_anevrysme_compli_type___2.factor = factor(data$hsa_anevrysme_compli_type___2,levels=c("0","1"))
+data$hsa_anevrysme_compli_type___3.factor = factor(data$hsa_anevrysme_compli_type___3,levels=c("0","1"))
+data$hsa_anevrysme_compli_type___4.factor = factor(data$hsa_anevrysme_compli_type___4,levels=c("0","1"))
+data$hsa_anevrysme_compli_type___5.factor = factor(data$hsa_anevrysme_compli_type___5,levels=c("0","1"))
+data$hsa_anevrysme_nimodipine.factor = factor(data$hsa_anevrysme_nimodipine,levels=c("1","0"))
+data$hsa_anevrysme_statine.factor = factor(data$hsa_anevrysme_statine,levels=c("1","0"))
+data$hsa_dysfonction_cardiaque.factor = factor(data$hsa_dysfonction_cardiaque,levels=c("1","0"))
+data$hsa_dysf_card_inotrope.factor = factor(data$hsa_dysf_card_inotrope,levels=c("1","0"))
+data$hsa_vasospasme.factor = factor(data$hsa_vasospasme,levels=c("1","0"))
+data$hsa_vasospasme_dg_type___1.factor = factor(data$hsa_vasospasme_dg_type___1,levels=c("0","1"))
+data$hsa_vasospasme_dg_type___2.factor = factor(data$hsa_vasospasme_dg_type___2,levels=c("0","1"))
+data$hsa_vasospasme_dg_type___3.factor = factor(data$hsa_vasospasme_dg_type___3,levels=c("0","1"))
+data$hsa_vasospasme_dg_type___4.factor = factor(data$hsa_vasospasme_dg_type___4,levels=c("0","1"))
+data$hsa_vasospasme_traitement.factor = factor(data$hsa_vasospasme_traitement,levels=c("1","0"))
+data$hsa_vasospasme_traitement_type___1.factor = factor(data$hsa_vasospasme_traitement_type___1,levels=c("0","1"))
+data$hsa_vasospasme_traitement_type___2.factor = factor(data$hsa_vasospasme_traitement_type___2,levels=c("0","1"))
+data$hsa_vasospasme_traitement_type___3.factor = factor(data$hsa_vasospasme_traitement_type___3,levels=c("0","1"))
+data$hsa_vasospasme_traitement_type___4.factor = factor(data$hsa_vasospasme_traitement_type___4,levels=c("0","1"))
+data$hsa_vasospasme_traitement_type___5.factor = factor(data$hsa_vasospasme_traitement_type___5,levels=c("0","1"))
+data$hsa_vasospasme_traitement_type___6.factor = factor(data$hsa_vasospasme_traitement_type___6,levels=c("0","1"))
+data$hsa_vasospasme_territoire___1.factor = factor(data$hsa_vasospasme_territoire___1,levels=c("0","1"))
+data$hsa_vasospasme_territoire___2.factor = factor(data$hsa_vasospasme_territoire___2,levels=c("0","1"))
+data$hsa_vasospasme_territoire___3.factor = factor(data$hsa_vasospasme_territoire___3,levels=c("0","1"))
+data$hsa_vasospasme_lateralite___1.factor = factor(data$hsa_vasospasme_lateralite___1,levels=c("0","1"))
+data$hsa_vasospasme_lateralite___2.factor = factor(data$hsa_vasospasme_lateralite___2,levels=c("0","1"))
+data$hemorragie_meningee_complete.factor = factor(data$hemorragie_meningee_complete,levels=c("0","1","2"))
+data$hip_cause.factor = factor(data$hip_cause,levels=c("1","2","3","4","5","6","7"))
+data$hiv.factor = factor(data$hiv,levels=c("1","0"))
+data$hip_localisation___1.factor = factor(data$hip_localisation___1,levels=c("0","1"))
+data$hip_localisation___2.factor = factor(data$hip_localisation___2,levels=c("0","1"))
+data$hip_localisation___3.factor = factor(data$hip_localisation___3,levels=c("0","1"))
+data$hip_localisation___4.factor = factor(data$hip_localisation___4,levels=c("0","1"))
+data$hip_taille_30ml.factor = factor(data$hip_taille_30ml,levels=c("1","0"))
+data$accident_vasculaire_cerebral_hemorragique_complete.factor = factor(data$accident_vasculaire_cerebral_hemorragique_complete,levels=c("0","1","2"))
+data$aic_localisation___0.factor = factor(data$aic_localisation___0,levels=c("0","1"))
+data$aic_localisation___1.factor = factor(data$aic_localisation___1,levels=c("0","1"))
+data$aic_localisation___2.factor = factor(data$aic_localisation___2,levels=c("0","1"))
+data$aic_localisation___3.factor = factor(data$aic_localisation___3,levels=c("0","1"))
+data$aic_localisation___4.factor = factor(data$aic_localisation___4,levels=c("0","1"))
+data$aic_localisation___5.factor = factor(data$aic_localisation___5,levels=c("0","1"))
+data$aic_localisation___6.factor = factor(data$aic_localisation___6,levels=c("0","1"))
+data$aic_localisation___7.factor = factor(data$aic_localisation___7,levels=c("0","1"))
+data$aic_lateralite___1.factor = factor(data$aic_lateralite___1,levels=c("0","1"))
+data$aic_lateralite___2.factor = factor(data$aic_lateralite___2,levels=c("0","1"))
+data$aic_cause.factor = factor(data$aic_cause,levels=c("1","2","3","4","5"))
+data$aic_thrombolyse.factor = factor(data$aic_thrombolyse,levels=c("1","0"))
+data$aic_thrombectomie.factor = factor(data$aic_thrombectomie,levels=c("1","0"))
+data$thrombectomie_anesthesie.factor = factor(data$thrombectomie_anesthesie,levels=c("1","2"))
+data$aic_thrombectomie_revasc.factor = factor(data$aic_thrombectomie_revasc,levels=c("1","0"))
+data$aic_thrombectomie_tici.factor = factor(data$aic_thrombectomie_tici,levels=c("1","2","3","4"))
+data$aic_stent.factor = factor(data$aic_stent,levels=c("1","0"))
+data$aic_stent_localisation___1.factor = factor(data$aic_stent_localisation___1,levels=c("0","1"))
+data$aic_stent_localisation___2.factor = factor(data$aic_stent_localisation___2,levels=c("0","1"))
+data$aic_stent_localisation___3.factor = factor(data$aic_stent_localisation___3,levels=c("0","1"))
+data$aic_stent_localisation___4.factor = factor(data$aic_stent_localisation___4,levels=c("0","1"))
+data$aic_stent_localisation___5.factor = factor(data$aic_stent_localisation___5,levels=c("0","1"))
+data$aic_nri_complication.factor = factor(data$aic_nri_complication,levels=c("1","0"))
+data$aic_nri_complication_type___1.factor = factor(data$aic_nri_complication_type___1,levels=c("0","1"))
+data$aic_nri_complication_type___2.factor = factor(data$aic_nri_complication_type___2,levels=c("0","1"))
+data$aic_nri_complication_type___3.factor = factor(data$aic_nri_complication_type___3,levels=c("0","1"))
+data$aic_nri_complication_type___4.factor = factor(data$aic_nri_complication_type___4,levels=c("0","1"))
+data$aic_nri_complication_type___5.factor = factor(data$aic_nri_complication_type___5,levels=c("0","1"))
+data$aic_nri_complication_type___6.factor = factor(data$aic_nri_complication_type___6,levels=c("0","1"))
+data$aic_nri_complication_type___7.factor = factor(data$aic_nri_complication_type___7,levels=c("0","1"))
+data$aic_complication.factor = factor(data$aic_complication,levels=c("1","0"))
+data$aic_complication_type___1.factor = factor(data$aic_complication_type___1,levels=c("0","1"))
+data$aic_complication_type___2.factor = factor(data$aic_complication_type___2,levels=c("0","1"))
+data$accident_vasculaire_ischemique_complete.factor = factor(data$accident_vasculaire_ischemique_complete,levels=c("0","1","2"))
+data$capteur_pic.factor = factor(data$capteur_pic,levels=c("1","0"))
+data$htic.factor = factor(data$htic,levels=c("1","0"))
+data$htic_traitement___1.factor = factor(data$htic_traitement___1,levels=c("0","1"))
+data$htic_traitement___2.factor = factor(data$htic_traitement___2,levels=c("0","1"))
+data$htic_traitement___3.factor = factor(data$htic_traitement___3,levels=c("0","1"))
+data$htic_traitement___4.factor = factor(data$htic_traitement___4,levels=c("0","1"))
+data$htic_traitement___5.factor = factor(data$htic_traitement___5,levels=c("0","1"))
+data$htic_traitement___11.factor = factor(data$htic_traitement___11,levels=c("0","1"))
+data$htic_traitement___6.factor = factor(data$htic_traitement___6,levels=c("0","1"))
+data$htic_traitement___7.factor = factor(data$htic_traitement___7,levels=c("0","1"))
+data$htic_traitement___8.factor = factor(data$htic_traitement___8,levels=c("0","1"))
+data$htic_traitement___9.factor = factor(data$htic_traitement___9,levels=c("0","1"))
+data$htic_traitement___10.factor = factor(data$htic_traitement___10,levels=c("0","1"))
+data$htic_traitement_hypnotique___1.factor = factor(data$htic_traitement_hypnotique___1,levels=c("0","1"))
+data$htic_traitement_hypnotique___2.factor = factor(data$htic_traitement_hypnotique___2,levels=c("0","1"))
+data$htic_traitement_hypnotique___3.factor = factor(data$htic_traitement_hypnotique___3,levels=c("0","1"))
+data$htic_traitement_hypnotique___4.factor = factor(data$htic_traitement_hypnotique___4,levels=c("0","1"))
+data$htic_traitement_curare___1.factor = factor(data$htic_traitement_curare___1,levels=c("0","1"))
+data$htic_traitement_curare___2.factor = factor(data$htic_traitement_curare___2,levels=c("0","1"))
+data$htic_traitement_curare___3.factor = factor(data$htic_traitement_curare___3,levels=c("0","1"))
+data$htic_traitement_burst_type.factor = factor(data$htic_traitement_burst_type,levels=c("1","2"))
+data$corticoides.factor = factor(data$corticoides,levels=c("1","0"))
+data$monitorage_tcd.factor = factor(data$monitorage_tcd,levels=c("1","0"))
+data$dtc_bf_rea.factor = factor(data$dtc_bf_rea,levels=c("1","0"))
+data$capteur_ptio2.factor = factor(data$capteur_ptio2,levels=c("1","0"))
+data$capteur_svjo2.factor = factor(data$capteur_svjo2,levels=c("1","0"))
+data$microdialyse.factor = factor(data$microdialyse,levels=c("1","0"))
+data$eeg_continu.factor = factor(data$eeg_continu,levels=c("1","0"))
+data$neurochirurgie.factor = factor(data$neurochirurgie,levels=c("1","0"))
+data$neurochirurgie_type___1.factor = factor(data$neurochirurgie_type___1,levels=c("0","1"))
+data$neurochirurgie_type___2.factor = factor(data$neurochirurgie_type___2,levels=c("0","1"))
+data$neurochirurgie_type___7.factor = factor(data$neurochirurgie_type___7,levels=c("0","1"))
+data$neurochirurgie_type___3.factor = factor(data$neurochirurgie_type___3,levels=c("0","1"))
+data$neurochirurgie_type___4.factor = factor(data$neurochirurgie_type___4,levels=c("0","1"))
+data$neurochirurgie_type___6.factor = factor(data$neurochirurgie_type___6,levels=c("0","1"))
+data$neurochirurgie_type___5.factor = factor(data$neurochirurgie_type___5,levels=c("0","1"))
+data$epilepsie.factor = factor(data$epilepsie,levels=c("1","0"))
+data$epilepsie_edme.factor = factor(data$epilepsie_edme,levels=c("1","0"))
+data$epilepsie_edme_refrac.factor = factor(data$epilepsie_edme_refrac,levels=c("1","0"))
+data$epilepsie_traitement___1.factor = factor(data$epilepsie_traitement___1,levels=c("0","1"))
+data$epilepsie_traitement___2.factor = factor(data$epilepsie_traitement___2,levels=c("0","1"))
+data$epilepsie_traitement___3.factor = factor(data$epilepsie_traitement___3,levels=c("0","1"))
+data$epilepsie_traitement___4.factor = factor(data$epilepsie_traitement___4,levels=c("0","1"))
+data$epilepsie_traitement___5.factor = factor(data$epilepsie_traitement___5,levels=c("0","1"))
+data$epilepsie_traitement___6.factor = factor(data$epilepsie_traitement___6,levels=c("0","1"))
+data$epilepsie_traitement___7.factor = factor(data$epilepsie_traitement___7,levels=c("0","1"))
+data$ventilation_rea.factor = factor(data$ventilation_rea,levels=c("1","0"))
+data$infection_rea.factor = factor(data$infection_rea,levels=c("1","0"))
+data$infection_rea_precoce.factor = factor(data$infection_rea_precoce,levels=c("1","0"))
+data$infection_rea_precoce_inh.factor = factor(data$infection_rea_precoce_inh,levels=c("1","0"))
+data$infection_rea_tardive.factor = factor(data$infection_rea_tardive,levels=c("1","0"))
+data$infection_rea_tard_type___1.factor = factor(data$infection_rea_tard_type___1,levels=c("0","1"))
+data$infection_rea_tard_type___2.factor = factor(data$infection_rea_tard_type___2,levels=c("0","1"))
+data$infection_rea_tard_type___3.factor = factor(data$infection_rea_tard_type___3,levels=c("0","1"))
+data$infection_rea_tard_type___4.factor = factor(data$infection_rea_tard_type___4,levels=c("0","1"))
+data$infection_rea_tard_type___5.factor = factor(data$infection_rea_tard_type___5,levels=c("0","1"))
+data$infection_rea_choc.factor = factor(data$infection_rea_choc,levels=c("1","0"))
+data$sedation_rea.factor = factor(data$sedation_rea,levels=c("1","0"))
+data$sedation_rea_type___1.factor = factor(data$sedation_rea_type___1,levels=c("0","1"))
+data$sedation_rea_type___2.factor = factor(data$sedation_rea_type___2,levels=c("0","1"))
+data$sedation_rea_type___3.factor = factor(data$sedation_rea_type___3,levels=c("0","1"))
+data$sedation_rea_type___4.factor = factor(data$sedation_rea_type___4,levels=c("0","1"))
+data$sedation_rea_type___5.factor = factor(data$sedation_rea_type___5,levels=c("0","1"))
+data$trachetomie.factor = factor(data$trachetomie,levels=c("1","0"))
+data$tbes_deglutition.factor = factor(data$tbes_deglutition,levels=c("1","0"))
+data$gpe.factor = factor(data$gpe,levels=c("1","0"))
+data$lata.factor = factor(data$lata,levels=c("1","0"))
+data$ata.factor = factor(data$ata,levels=c("1","0"))
+data$deces_rea.factor = factor(data$deces_rea,levels=c("1","0"))
+data$edme.factor = factor(data$edme,levels=c("1","0"))
+data$pmo.factor = factor(data$pmo,levels=c("1","0"))
+data$pmo_maastricht.factor = factor(data$pmo_maastricht,levels=c("1","2"))
+data$edme_confirmation.factor = factor(data$edme_confirmation,levels=c("1","2","3"))
+data$prise_en_charge_en_reanimation_complete.factor = factor(data$prise_en_charge_en_reanimation_complete,levels=c("0","1","2"))
+data$sortie_rea.factor = factor(data$sortie_rea,levels=c("1","2","3","4","5","6","7","10","11","12","8","9"))
+data$ouverture_yeux.factor = factor(data$ouverture_yeux,levels=c("1","0"))
+data$etat_conscience.factor = factor(data$etat_conscience,levels=c("1","2","3"))
+data$crsr.factor = factor(data$crsr,levels=c("1","0"))
+data$eval_distance.factor = factor(data$eval_distance,levels=c("1","0"))
+data$evaluation_distance_deces.factor = factor(data$evaluation_distance_deces,levels=c("1","0"))
+data$evaluation_distance_rad.factor = factor(data$evaluation_distance_rad,levels=c("1","0"))
+data$evaluation_distance_pec_spe.factor = factor(data$evaluation_distance_pec_spe,levels=c("1","0"))
+data$eval_distance_score___1.factor = factor(data$eval_distance_score___1,levels=c("0","1"))
+data$eval_distance_score___5.factor = factor(data$eval_distance_score___5,levels=c("0","1"))
+data$eval_distance_score___2.factor = factor(data$eval_distance_score___2,levels=c("0","1"))
+data$eval_distance_score___3.factor = factor(data$eval_distance_score___3,levels=c("0","1"))
+data$eval_distance_score___6.factor = factor(data$eval_distance_score___6,levels=c("0","1"))
+data$eval_distance_score___4.factor = factor(data$eval_distance_score___4,levels=c("0","1"))
+data$donnees_a_la_suite_de_la_reanimation_complete.factor = factor(data$donnees_a_la_suite_de_la_reanimation_complete,levels=c("0","1","2"))
+
+levels(data$redcap_data_access_group.factor)=c("Beaujon","Bicetre","Henri Mondor","Lariboisière","Pitié-Salpétrière")
+levels(data$criteres_inclusion___1.factor)=c("Unchecked","Checked")
+levels(data$criteres_inclusion___2.factor)=c("Unchecked","Checked")
+levels(data$criteres_inclusion___3.factor)=c("Unchecked","Checked")
+levels(data$criteres_inclusion___4.factor)=c("Unchecked","Checked")
+levels(data$centre_inclusion.factor)=c("Bicêtre","Lariboisière","Beaujon","Pitié-Salpétrière","Henri Mondor")
+levels(data$traumabase.factor)=c("Oui","Non")
+levels(data$sex.factor)=c("M","F","Inconnu")
+levels(data$femme_peripartum.factor)=c("Oui","Non")
+levels(data$more_than_2_years_old.factor)=c("Oui","Non")
+levels(data$ieyn.factor)=c("Oui","Non")
+levels(data$donnes_dmographiques_aphp_complete.factor)=c("Incomplete","Unverified","Complete")
+levels(data$hta.factor)=c("Oui","Non","Non disponible")
+levels(data$hta_traitement.factor)=c("Oui","Non")
+levels(data$diabete.factor)=c("Type 1","Type 2 non insulino-requerant","Type 2 insulino-requerant","Non","Non disponible")
+levels(data$tabac.factor)=c("Actif","Sevre","Non")
+levels(data$intox_chronique___1.factor)=c("Unchecked","Checked")
+levels(data$intox_chronique___2.factor)=c("Unchecked","Checked")
+levels(data$intox_chronique___3.factor)=c("Unchecked","Checked")
+levels(data$intox_chronique___4.factor)=c("Unchecked","Checked")
+levels(data$intox_chronique___5.factor)=c("Unchecked","Checked")
+levels(data$intox_aigue___1.factor)=c("Unchecked","Checked")
+levels(data$intox_aigue___2.factor)=c("Unchecked","Checked")
+levels(data$intox_aigue___3.factor)=c("Unchecked","Checked")
+levels(data$intox_aigue___4.factor)=c("Unchecked","Checked")
+levels(data$intox_aigue___5.factor)=c("Unchecked","Checked")
+levels(data$aap.factor)=c("Oui","Non")
+levels(data$aap_type___1.factor)=c("Unchecked","Checked")
+levels(data$aap_type___2.factor)=c("Unchecked","Checked")
+levels(data$aap_type___3.factor)=c("Unchecked","Checked")
+levels(data$aap_type___4.factor)=c("Unchecked","Checked")
+levels(data$aap_type___5.factor)=c("Unchecked","Checked")
+levels(data$aap_type___6.factor)=c("Unchecked","Checked")
+levels(data$aap_type___7.factor)=c("Unchecked","Checked")
+levels(data$lateralite.factor)=c("Gaucher","Droitier","Ambidextre","Non disponible")
+levels(data$anticoagulant.factor)=c("Oui","Non")
+levels(data$anticoagulant_type___1.factor)=c("Unchecked","Checked")
+levels(data$anticoagulant_type___2.factor)=c("Unchecked","Checked")
+levels(data$anticoagulant_type___3.factor)=c("Unchecked","Checked")
+levels(data$anticoagulant_type___4.factor)=c("Unchecked","Checked")
+levels(data$francophone.factor)=c("Oui","Non")
+levels(data$isolement.factor)=c("Oui","Non")
+levels(data$activite.factor)=c("Etudiant","En activite","Chomage","Invalidite","Retraite","Non disponible","Sans domicile fixe","Incarcération","Soccupe des enfants")
+levels(data$antecedents_complete.factor)=c("Incomplete","Unverified","Complete")
+levels(data$pas_inf_90.factor)=c("Oui","Non")
+levels(data$spo2_inf_90.factor)=c("Oui","Non")
+levels(data$gcs_detaille.factor)=c("Oui","Non")
+levels(data$gcs_yeux_initial.factor)=c("1","2","3","4")
+levels(data$gcs_verbal_initial.factor)=c("1","2","3","4","5")
+levels(data$gcs_moteur_initial.factor)=c("1","2","3","4","5","6")
+levels(data$convulsions_initial.factor)=c("Oui","Non")
+levels(data$pupille_gauche_admission_v2.factor)=c("Myosis","Intermédiaire","Mydriase")
+levels(data$pupille_droite_admission_v2.factor)=c("Myosis","Intermédiaire","Mydriase")
+levels(data$dtc_initial_fait.factor)=c("Oui","Non")
+levels(data$bf_dtc_initial.factor)=c("Oui","Non")
+levels(data$bf_dtc_initial_cote___1.factor)=c("Unchecked","Checked")
+levels(data$bf_dtc_initial_cote___2.factor)=c("Unchecked","Checked")
+levels(data$dtc_g_initial.factor)=c("Oui","Non")
+levels(data$dtc_d_initial.factor)=c("Oui","Non")
+levels(data$imagerie_prerea.factor)=c("Oui","Non")
+levels(data$imagerie_prerea_type___1.factor)=c("Unchecked","Checked")
+levels(data$imagerie_prerea_type___2.factor)=c("Unchecked","Checked")
+levels(data$imagerie_prerea_injection.factor)=c("Oui","Non")
+levels(data$malformation_vasculaire.factor)=c("Oui","Non")
+levels(data$malformation_vasculaire_type___1.factor)=c("Unchecked","Checked")
+levels(data$malformation_vasculaire_type___2.factor)=c("Unchecked","Checked")
+levels(data$malformation_vasculaire_type___3.factor)=c("Unchecked","Checked")
+levels(data$osmo_prerea.factor)=c("Oui","Non")
+levels(data$osmo_prerea_indication___1.factor)=c("Unchecked","Checked")
+levels(data$osmo_prerea_indication___2.factor)=c("Unchecked","Checked")
+levels(data$osmo_prerea_indication___3.factor)=c("Unchecked","Checked")
+levels(data$osmo_prerea_type___1.factor)=c("Unchecked","Checked")
+levels(data$osmo_prerea_type___2.factor)=c("Unchecked","Checked")
+levels(data$osmo_prerea_efficace.factor)=c("Oui","Non")
+levels(data$intubation_prerea.factor)=c("Oui","Non")
+levels(data$etco2_dispo.factor)=c("Oui","Non")
+levels(data$norad_prerea.factor)=c("Oui","Non")
+levels(data$norad_prerea_indication.factor)=c("Etat de choc","Perfusion cerebrale")
+levels(data$acr_prehosp.factor)=c("Oui","Non")
+levels(data$prise_en_charge_avant_la_reanimation_complete.factor)=c("Incomplete","Unverified","Complete")
+levels(data$mode_admission.factor)=c("Urgence interne","Transfert primaire","Transfert secondaire")
+levels(data$admission_ggnc_pdses.factor)=c("GGNC","PDSES","Aucun")
+levels(data$sedation_admission.factor)=c("Oui","Non")
+levels(data$convulsions_admission.factor)=c("Oui","Non")
+levels(data$gcs_yeux_admission.factor)=c("1","2","3","4")
+levels(data$gcs_verbal_admission.factor)=c("1","2","3","4","5")
+levels(data$gcs_moteur_admission.factor)=c("1","2","3","4","5","6")
+levels(data$gcs_yeux_pire_24_heures.factor)=c("1","2","3","4")
+levels(data$gcs_verbal_pire_24_heures.factor)=c("1","2","3","4","5")
+levels(data$gcs_moteur_pire_24_heures.factor)=c("1","2","3","4","5","6")
+levels(data$pupille_gauche_admission.factor)=c("Myosis","Intermediaire","Mydriase")
+levels(data$pupille_droite_admission.factor)=c("Myosis","Intermediaire","Mydriase")
+levels(data$react_pupille_g.factor)=c("Oui","Non")
+levels(data$react_pupille_d.factor)=c("Oui","Non")
+levels(data$dtc_admission.factor)=c("Oui","Non")
+levels(data$dtc_g_admission.factor)=c("Oui","Non")
+levels(data$dtc_d_admission.factor)=c("Oui","Non")
+levels(data$imagerie_rea_24_heures.factor)=c("Oui","Non")
+levels(data$imagerie_rea_type___1.factor)=c("Unchecked","Checked")
+levels(data$imagerie_rea_type___2.factor)=c("Unchecked","Checked")
+levels(data$imagerie_rea_injection.factor)=c("Oui","Non")
+levels(data$osmo_rea.factor)=c("Oui","Non")
+levels(data$osmo_rea_indication.factor)=c("Anomalie pupillaire","Doppler pathologiques")
+levels(data$osmo_rea_type.factor)=c("Mannitol","Serum sale hypertonique")
+levels(data$osmo_rea_efficace.factor)=c("Oui","Non")
+levels(data$intubation_rea.factor)=c("Oui","Non")
+levels(data$norad_rea.factor)=c("Oui","Non")
+levels(data$norad_rea_indication.factor)=c("Etat de choc","Perfusion cerebrale")
+levels(data$diagnostic.factor)=c("Traumatisme cranien","Hemorragie meningee","Accident vasculaire cerebral hemorragique","Accident vasculaire cerebral ischemique","Infection neuro-meningee","Tumeur")
+levels(data$prise_en_charge_initiale_complete.factor)=c("Incomplete","Unverified","Complete")
+levels(data$mecanisme_trauma.factor)=c("Accident de la voie publique","Chute","Rixe","Inconnue","Autre")
+levels(data$trauma_chute_6m.factor)=c("Oui","Non")
+levels(data$trauma_penetrant.factor)=c("Oui","Non")
+levels(data$trauma_lesions_scan___1.factor)=c("Unchecked","Checked")
+levels(data$trauma_lesions_scan___2.factor)=c("Unchecked","Checked")
+levels(data$trauma_lesions_scan___3.factor)=c("Unchecked","Checked")
+levels(data$trauma_lesions_scan___4.factor)=c("Unchecked","Checked")
+levels(data$trauma_lesions_scan___5.factor)=c("Unchecked","Checked")
+levels(data$trauma_lesions_scan___6.factor)=c("Unchecked","Checked")
+levels(data$trauma_lesions_scan___7.factor)=c("Unchecked","Checked")
+levels(data$trauma_vasospasme.factor)=c("Oui","Non")
+levels(data$trauma_lesions_associees.factor)=c("Oui","Non")
+levels(data$trauma_hemorragie_intervention.factor)=c("Oui","Non")
+levels(data$trauma_type_hemostase___1.factor)=c("Unchecked","Checked")
+levels(data$trauma_type_hemostase___2.factor)=c("Unchecked","Checked")
+levels(data$trauma_transfusion_2_cgr.factor)=c("Oui","Non")
+levels(data$trauma_medullaire.factor)=c("Oui","Non")
+levels(data$traumatisme_cranien_complete.factor)=c("Incomplete","Unverified","Complete")
+levels(data$hsa_perte_conscience.factor)=c("Oui","Non")
+levels(data$hsa_anevrysme.factor)=c("Oui","Non")
+levels(data$hsa_anevrysme_mav.factor)=c("Oui","Non")
+levels(data$hsa_anevrysme_localisation.factor)=c("Artere cerebrale moyenne","Artere cerebrale anterieure","Artere communicante anterieure","Artere communicante posterieure","Artere cerebrale posterieure","Tronc basilaire","Artère vertebrale","Terminaison carotidienne")
+levels(data$hsa_anevrysme_cote.factor)=c("Gauche","Droite")
+levels(data$hsa_anevrysme_traitement.factor)=c("Oui","Non")
+levels(data$hsa_anevrysme_traitement_type.factor)=c("Radiologie interventionnelle","Chirurgie")
+levels(data$hsa_anevrysme_complication.factor)=c("Oui","Non")
+levels(data$hsa_anevrysme_compli_type___1.factor)=c("Unchecked","Checked")
+levels(data$hsa_anevrysme_compli_type___2.factor)=c("Unchecked","Checked")
+levels(data$hsa_anevrysme_compli_type___3.factor)=c("Unchecked","Checked")
+levels(data$hsa_anevrysme_compli_type___4.factor)=c("Unchecked","Checked")
+levels(data$hsa_anevrysme_compli_type___5.factor)=c("Unchecked","Checked")
+levels(data$hsa_anevrysme_nimodipine.factor)=c("Oui","Non")
+levels(data$hsa_anevrysme_statine.factor)=c("Oui","Non")
+levels(data$hsa_dysfonction_cardiaque.factor)=c("Oui","Non")
+levels(data$hsa_dysf_card_inotrope.factor)=c("Oui","Non")
+levels(data$hsa_vasospasme.factor)=c("Oui","Non")
+levels(data$hsa_vasospasme_dg_type___1.factor)=c("Unchecked","Checked")
+levels(data$hsa_vasospasme_dg_type___2.factor)=c("Unchecked","Checked")
+levels(data$hsa_vasospasme_dg_type___3.factor)=c("Unchecked","Checked")
+levels(data$hsa_vasospasme_dg_type___4.factor)=c("Unchecked","Checked")
+levels(data$hsa_vasospasme_traitement.factor)=c("Oui","Non")
+levels(data$hsa_vasospasme_traitement_type___1.factor)=c("Unchecked","Checked")
+levels(data$hsa_vasospasme_traitement_type___2.factor)=c("Unchecked","Checked")
+levels(data$hsa_vasospasme_traitement_type___3.factor)=c("Unchecked","Checked")
+levels(data$hsa_vasospasme_traitement_type___4.factor)=c("Unchecked","Checked")
+levels(data$hsa_vasospasme_traitement_type___5.factor)=c("Unchecked","Checked")
+levels(data$hsa_vasospasme_traitement_type___6.factor)=c("Unchecked","Checked")
+levels(data$hsa_vasospasme_territoire___1.factor)=c("Unchecked","Checked")
+levels(data$hsa_vasospasme_territoire___2.factor)=c("Unchecked","Checked")
+levels(data$hsa_vasospasme_territoire___3.factor)=c("Unchecked","Checked")
+levels(data$hsa_vasospasme_lateralite___1.factor)=c("Unchecked","Checked")
+levels(data$hsa_vasospasme_lateralite___2.factor)=c("Unchecked","Checked")
+levels(data$hemorragie_meningee_complete.factor)=c("Incomplete","Unverified","Complete")
+levels(data$hip_cause.factor)=c("Arteriosclerose (HTA)","Malformation arterio-veineuse","Tumeur","Inconnu","Autre","Thrombophlébite cérébrale","Angiopathie amyloïde")
+levels(data$hiv.factor)=c("Oui","Non")
+levels(data$hip_localisation___1.factor)=c("Unchecked","Checked")
+levels(data$hip_localisation___2.factor)=c("Unchecked","Checked")
+levels(data$hip_localisation___3.factor)=c("Unchecked","Checked")
+levels(data$hip_localisation___4.factor)=c("Unchecked","Checked")
+levels(data$hip_taille_30ml.factor)=c("Oui","Non")
+levels(data$accident_vasculaire_cerebral_hemorragique_complete.factor)=c("Incomplete","Unverified","Complete")
+levels(data$aic_localisation___0.factor)=c("Unchecked","Checked")
+levels(data$aic_localisation___1.factor)=c("Unchecked","Checked")
+levels(data$aic_localisation___2.factor)=c("Unchecked","Checked")
+levels(data$aic_localisation___3.factor)=c("Unchecked","Checked")
+levels(data$aic_localisation___4.factor)=c("Unchecked","Checked")
+levels(data$aic_localisation___5.factor)=c("Unchecked","Checked")
+levels(data$aic_localisation___6.factor)=c("Unchecked","Checked")
+levels(data$aic_localisation___7.factor)=c("Unchecked","Checked")
+levels(data$aic_lateralite___1.factor)=c("Unchecked","Checked")
+levels(data$aic_lateralite___2.factor)=c("Unchecked","Checked")
+levels(data$aic_cause.factor)=c("Athérome","Cardiopathie emboligène","Lacune","Autres causes","Inconnue")
+levels(data$aic_thrombolyse.factor)=c("Oui","Non")
+levels(data$aic_thrombectomie.factor)=c("Oui","Non")
+levels(data$thrombectomie_anesthesie.factor)=c("Anesthesie generale","Sedation")
+levels(data$aic_thrombectomie_revasc.factor)=c("Oui","Non")
+levels(data$aic_thrombectomie_tici.factor)=c("0","1","2","3")
+levels(data$aic_stent.factor)=c("Oui","Non")
+levels(data$aic_stent_localisation___1.factor)=c("Unchecked","Checked")
+levels(data$aic_stent_localisation___2.factor)=c("Unchecked","Checked")
+levels(data$aic_stent_localisation___3.factor)=c("Unchecked","Checked")
+levels(data$aic_stent_localisation___4.factor)=c("Unchecked","Checked")
+levels(data$aic_stent_localisation___5.factor)=c("Unchecked","Checked")
+levels(data$aic_nri_complication.factor)=c("Oui","Non")
+levels(data$aic_nri_complication_type___1.factor)=c("Unchecked","Checked")
+levels(data$aic_nri_complication_type___2.factor)=c("Unchecked","Checked")
+levels(data$aic_nri_complication_type___3.factor)=c("Unchecked","Checked")
+levels(data$aic_nri_complication_type___4.factor)=c("Unchecked","Checked")
+levels(data$aic_nri_complication_type___5.factor)=c("Unchecked","Checked")
+levels(data$aic_nri_complication_type___6.factor)=c("Unchecked","Checked")
+levels(data$aic_nri_complication_type___7.factor)=c("Unchecked","Checked")
+levels(data$aic_complication.factor)=c("Oui","Non")
+levels(data$aic_complication_type___1.factor)=c("Unchecked","Checked")
+levels(data$aic_complication_type___2.factor)=c("Unchecked","Checked")
+levels(data$accident_vasculaire_ischemique_complete.factor)=c("Incomplete","Unverified","Complete")
+levels(data$capteur_pic.factor)=c("Oui","Non")
+levels(data$htic.factor)=c("Oui","Non")
+levels(data$htic_traitement___1.factor)=c("Unchecked","Checked")
+levels(data$htic_traitement___2.factor)=c("Unchecked","Checked")
+levels(data$htic_traitement___3.factor)=c("Unchecked","Checked")
+levels(data$htic_traitement___4.factor)=c("Unchecked","Checked")
+levels(data$htic_traitement___5.factor)=c("Unchecked","Checked")
+levels(data$htic_traitement___11.factor)=c("Unchecked","Checked")
+levels(data$htic_traitement___6.factor)=c("Unchecked","Checked")
+levels(data$htic_traitement___7.factor)=c("Unchecked","Checked")
+levels(data$htic_traitement___8.factor)=c("Unchecked","Checked")
+levels(data$htic_traitement___9.factor)=c("Unchecked","Checked")
+levels(data$htic_traitement___10.factor)=c("Unchecked","Checked")
+levels(data$htic_traitement_hypnotique___1.factor)=c("Unchecked","Checked")
+levels(data$htic_traitement_hypnotique___2.factor)=c("Unchecked","Checked")
+levels(data$htic_traitement_hypnotique___3.factor)=c("Unchecked","Checked")
+levels(data$htic_traitement_hypnotique___4.factor)=c("Unchecked","Checked")
+levels(data$htic_traitement_curare___1.factor)=c("Unchecked","Checked")
+levels(data$htic_traitement_curare___2.factor)=c("Unchecked","Checked")
+levels(data$htic_traitement_curare___3.factor)=c("Unchecked","Checked")
+levels(data$htic_traitement_burst_type.factor)=c("Propofol","Thiopental")
+levels(data$corticoides.factor)=c("Oui","Non")
+levels(data$monitorage_tcd.factor)=c("Oui","Non")
+levels(data$dtc_bf_rea.factor)=c("Oui","Non")
+levels(data$capteur_ptio2.factor)=c("Oui","Non")
+levels(data$capteur_svjo2.factor)=c("Oui","Non")
+levels(data$microdialyse.factor)=c("Oui","Non")
+levels(data$eeg_continu.factor)=c("Oui","Non")
+levels(data$neurochirurgie.factor)=c("Oui","Non")
+levels(data$neurochirurgie_type___1.factor)=c("Unchecked","Checked")
+levels(data$neurochirurgie_type___2.factor)=c("Unchecked","Checked")
+levels(data$neurochirurgie_type___7.factor)=c("Unchecked","Checked")
+levels(data$neurochirurgie_type___3.factor)=c("Unchecked","Checked")
+levels(data$neurochirurgie_type___4.factor)=c("Unchecked","Checked")
+levels(data$neurochirurgie_type___6.factor)=c("Unchecked","Checked")
+levels(data$neurochirurgie_type___5.factor)=c("Unchecked","Checked")
+levels(data$epilepsie.factor)=c("Oui","Non")
+levels(data$epilepsie_edme.factor)=c("Oui","Non")
+levels(data$epilepsie_edme_refrac.factor)=c("Oui","Non")
+levels(data$epilepsie_traitement___1.factor)=c("Unchecked","Checked")
+levels(data$epilepsie_traitement___2.factor)=c("Unchecked","Checked")
+levels(data$epilepsie_traitement___3.factor)=c("Unchecked","Checked")
+levels(data$epilepsie_traitement___4.factor)=c("Unchecked","Checked")
+levels(data$epilepsie_traitement___5.factor)=c("Unchecked","Checked")
+levels(data$epilepsie_traitement___6.factor)=c("Unchecked","Checked")
+levels(data$epilepsie_traitement___7.factor)=c("Unchecked","Checked")
+levels(data$ventilation_rea.factor)=c("Oui","Non")
+levels(data$infection_rea.factor)=c("Oui","Non")
+levels(data$infection_rea_precoce.factor)=c("Oui","Non")
+levels(data$infection_rea_precoce_inh.factor)=c("Oui","Non")
+levels(data$infection_rea_tardive.factor)=c("Oui","Non")
+levels(data$infection_rea_tard_type___1.factor)=c("Unchecked","Checked")
+levels(data$infection_rea_tard_type___2.factor)=c("Unchecked","Checked")
+levels(data$infection_rea_tard_type___3.factor)=c("Unchecked","Checked")
+levels(data$infection_rea_tard_type___4.factor)=c("Unchecked","Checked")
+levels(data$infection_rea_tard_type___5.factor)=c("Unchecked","Checked")
+levels(data$infection_rea_choc.factor)=c("Oui","Non")
+levels(data$sedation_rea.factor)=c("Oui","Non")
+levels(data$sedation_rea_type___1.factor)=c("Unchecked","Checked")
+levels(data$sedation_rea_type___2.factor)=c("Unchecked","Checked")
+levels(data$sedation_rea_type___3.factor)=c("Unchecked","Checked")
+levels(data$sedation_rea_type___4.factor)=c("Unchecked","Checked")
+levels(data$sedation_rea_type___5.factor)=c("Unchecked","Checked")
+levels(data$trachetomie.factor)=c("Oui","Non")
+levels(data$tbes_deglutition.factor)=c("Oui","Non")
+levels(data$gpe.factor)=c("Oui","Non")
+levels(data$lata.factor)=c("Oui","Non")
+levels(data$ata.factor)=c("Oui","Non")
+levels(data$deces_rea.factor)=c("Oui","Non")
+levels(data$edme.factor)=c("Oui","Non")
+levels(data$pmo.factor)=c("Oui","Non")
+levels(data$pmo_maastricht.factor)=c("Arrêt des thérapeutiques actives","État de mort encéphalique")
+levels(data$edme_confirmation.factor)=c("Angioscanner","EEG","Arteriographie")
+levels(data$prise_en_charge_en_reanimation_complete.factor)=c("Incomplete","Unverified","Complete")
+levels(data$sortie_rea.factor)=c("Autre reanimation","Service de neurochirurgie","Autre service de chirurgie","Service de neurologie","Autre service de medecine","SRPR","SMR","USPC / MAS","Hospitalisation à domicile (HAD)","Hospitalisation de jour (HDJ)","Domicile","Autre")
+levels(data$ouverture_yeux.factor)=c("Oui","Non")
+levels(data$etat_conscience.factor)=c("Eveil non repondant","Conscience minimale","Conscience")
+levels(data$crsr.factor)=c("Oui","Non")
+levels(data$eval_distance.factor)=c("Oui","Non")
+levels(data$evaluation_distance_deces.factor)=c("Oui","Non")
+levels(data$evaluation_distance_rad.factor)=c("Oui","Non")
+levels(data$evaluation_distance_pec_spe.factor)=c("Oui","Non")
+levels(data$eval_distance_score___1.factor)=c("Unchecked","Checked")
+levels(data$eval_distance_score___5.factor)=c("Unchecked","Checked")
+levels(data$eval_distance_score___2.factor)=c("Unchecked","Checked")
+levels(data$eval_distance_score___3.factor)=c("Unchecked","Checked")
+levels(data$eval_distance_score___6.factor)=c("Unchecked","Checked")
+levels(data$eval_distance_score___4.factor)=c("Unchecked","Checked")
+levels(data$donnees_a_la_suite_de_la_reanimation_complete.factor)=c("Incomplete","Unverified","Complete")
+```
+## Data management
+### Dictionnaire de données
+```{r}
+dictionary <- data |>
+  generate_dictionary() |>
+  rename(Variable = variable) |>
+  rename(Description = label)
+```
+### Unification des variables de devenir 
+#### Récupération des données codées de façon textuelle
+##### Définition des fonctions
+```{r}
+extraction_gos_textuel <- function(x) {
+  tmp <- str_extract(x, "(?i)gos\\s*[:=]?\\s*[1-5]")
+  score <- str_extract(tmp, "[1-5]")
+  as.factor(score)
+}
+
+extraction_mrs_textuel <- function(x) {
+  tmp2 <- str_extract(x, "(?i)mrs\\s*[:=]?\\s*[0-6]")
+  score2 <- str_extract(tmp2, "[0-6]")
+  as.factor(score2)
+}
+```
+##### Variables temporaires
+```{r}
+data$gostmp <- extraction_gos_textuel(data$eval_distance_score_texte)
+data$mrstmp <- extraction_mrs_textuel(data$eval_distance_score_texte)
+```
+
+##### Ajout des éléments textuels aux variables existantes
+```{r}
+data <- data |>
+  mutate(eval_distance_score_mrs = as_factor(eval_distance_score_mrs)) |>
+  mutate(eval_distance_score_gos = as_factor(eval_distance_score_gos)) |>
+  mutate(eval_distance_score_gos = if_else(is.na(eval_distance_score_gos), gostmp, eval_distance_score_gos)) |>
+mutate(eval_distance_score_mrs = if_else(is.na(eval_distance_score_mrs), mrstmp, eval_distance_score_mrs))
+```
+#### Correspondance entre GOSE et GOS
+Réfléchir pour la discussion aux discordances potentielles entre mRs et GOS/GOSE (problème de la concordance abordé dans l'article de Gaastra 2022)
+
+```{r}
+data <- data |>
+  mutate(eval_distance_score_gos = case_when(
+    eval_distance_score_gose == 1 & is.na(eval_distance_score_gos) ~ 1,
+    eval_distance_score_gose == 2 & is.na(eval_distance_score_gos)  ~ 2,
+    eval_distance_score_gose %in% c(3, 4) & is.na(eval_distance_score_gos) ~ 3,
+    eval_distance_score_gose %in% c(5, 6) & is.na(eval_distance_score_gos) ~ 4,
+    eval_distance_score_gose %in% c(7, 8) & is.na(eval_distance_score_gos) ~ 5,
+    NA ~ TRUE,
+    .default = as.numeric(as.character(eval_distance_score_gos))
+  ))
+```
+#### Correspondance entre GOS et mRs
+A noter que le mRs étant pris comme variable de pronostic de référence (on peut réfléchir à faire autrement), dès qu'une valeur de mRs est présente, elle prend le pas sur les autres en cas de discordance.
+```{r}
+data <- data |>
+  mutate(eval_distance_score_mrs = case_when(
+    eval_distance_score_gos == 1 & is.na(eval_distance_score_mrs) ~ 6,
+    deces_rea == 1 ~ 6,
+    eval_distance_score_gos == 2 & is.na(eval_distance_score_mrs) ~ 5,
+    eval_distance_score_gos == 3 & is.na(eval_distance_score_mrs) ~ 4,
+    eval_distance_score_gos == 4 & is.na(eval_distance_score_mrs) ~ 3,
+    eval_distance_score_gos == 5 & is.na(eval_distance_score_mrs) ~ 2,
+    NA ~ TRUE,
+    .default = as.numeric(as.character(eval_distance_score_mrs))
+  ))
+```
+#### Compte des différents niveaux de Rankin Score
+La récupération textuelle des valeurs de GOS permet de récupérer 6 patients, on passe de 422 à 416 données manquantes, soit presque 2000 pronostics renseignés
+```{r}
+data |>
+  select(c("record_id", "eval_distance_score_gose", "eval_distance_score_gos", "eval_distance_score_mrs")) |>
+  count(eval_distance_score_mrs)
+```
+### Ajout de variables secondaires
+```{r}
+data <- data |>
+  mutate(imc = round(poids/((taille/100)^2),1)) |>
+  mutate(ventilation_rea_duree = as.integer(ventilation_rea_duree)) |>
+  mutate(pronostic_dichotomie = case_when(
+    eval_distance_score_mrs < 3 ~ "Bon pronostic",
+    eval_distance_score_mrs > 2 & eval_distance_score_mrs < 6 ~ "Mauvais pronostic",
+    deces_rea == 0 & eval_distance_score_mrs == 6 ~ "Mauvais pronostic",
+    deces_rea == 1 ~ "Décès en réanimation",
+    TRUE ~ NA)) |>
+  mutate(pronostic_dichotomie = as_factor(pronostic_dichotomie)) |>
+  mutate(eval_distance_score_gos = as_factor(eval_distance_score_gos)) |>
+  mutate(eval_distance_score_mrs = as_factor(eval_distance_score_mrs)) |>
+  mutate(delai_admission = time_length(as_datetime(ymd_hms(date_admission)) - as_datetime(ymd_hms(date_symptomes)), unit = "hours")) |>
+  mutate(handicap_anterieur = ifelse(rankin_score > 1, 1, 0)) |>
+  mutate(deces_total = case_when(
+    deces_rea == "0" & evaluation_distance_deces == "1" ~ 0,
+    deces_rea == "0" & evaluation_distance_deces == "0" ~ 1,
+    deces_rea == "0" & is.na(evaluation_distance_deces) ~ 0,
+    deces_rea == "1" & is.na(evaluation_distance_deces) ~ 1,
+    is.na(deces_rea) & evaluation_distance_deces == "1" ~ 0,
+    is.na(deces_rea) & is.na(evaluation_distance_deces) ~ NA,
+    TRUE ~ TRUE
+  )) |>
+  mutate(date_deces = as_date(ifelse(deces_total == "1" & !is.na(evaluation_distance_date), evaluation_distance_date, deces_date))) |>
+  mutate(temps_survie = case_when(
+    deces_rea == "1" ~ as_date(ymd(date_deces)) - as_date(ymd_hms(date_admission)),
+    deces_rea == "0" ~ as_date(ymd(evaluation_distance_date)) - as_date(ymd_hms(date_admission))))
+```
+```{r}
+data |>
+mutate(temps_survie = case_when(
+    deces_rea == "1" ~ as_date(ymd(date_deces)) - as_date(ymd_hms(date_admission)),
+    deces_rea == "0" ~ as_date(ymd(evaluation_distance_date)) - as_date(ymd_hms(date_admission)))) |>
+  select(deces_rea, date_deces, date_admission, evaluation_distance_date, temps_survie)
+```
+### Ecriture du fichier RDS
+```{r}
+write_rds(data, "data.rds")
+```
+### Sélection de la population
+```{r}
+data_art <- data |>
+  filter(rfstdtc < "2025-03-01" & !is.na(rfstdtc))
+```
+## Qualité des données
+### Vérification du respect des critères d'inclusion
+```{r}
+data_art |>
+  filter(if_any(matches("criteres_inclusion") & !ends_with("factor"), ~ . == 0))
+```
+```{r}
+
+```
+
+### Nombre de patients vivants, par centre, sans pronostic neurologique à distance renseigné
+
+Discussion méthodologique : un certain nombre de patients n'a pas de suivi à distance, parce qu'ils sont perdus de vue (le plus souvent, patients précaires ou départs à l'étranger), et non pas parce que la donnée est présente mais non recueillie. Faut-il les exclure, sachant que ces patients ne sont pas représentatifs de la population générale ? Ou faut-il les inclure quand même ? Imputer les devenirs ?
+A discuter.
+```{r}
+data_art |>
+  select(centre_inclusion, eval_distance, deces_rea) |>
+  filter(deces_rea == "0") |>
+  filter(eval_distance == "0"  | is.na(eval_distance)) |>
+  group_by(eval_distance, centre_inclusion) |>
+  count() |>
+  arrange(centre_inclusion)
+```
+### Nombre de patients vivants, par centre et avec les numéros d'inclusion, avec un pronostic neurologique "NA"
+```{r}
+data_art |>
+  filter(deces_rea == "0") |>
+  filter(is.na(eval_distance)) |>
+  select(centre_inclusion, record_id)
+```
+
+### Vérification du nombre de données manquantes sur les principales variables d'intérêt
+Il faut probablement compléter les données de décès en réa (faciles à compléter)
+```{r}
+data_art |>
+  select(centre_inclusion.factor, age, sex.factor, date_admission, gcs_total_pire_24_heures, diagnostic.factor, eval_distance.factor, deces_rea.factor, deces_date, pronostic_dichotomie, eval_distance_score_mrs) |>
+  group_by(deces_rea.factor) |>
+  ff_glimpse()
+```
+### Tous les dossiers avec une évaluation à distance ont au moins un score rempli (exclusion faite des éléments de texte, qui sont presque toujours redondants dans cette version de l'extraction (ex : mRs 4 rempli dans le champ texte est toujours redondant d'un GOS (et vive-versa) sauf pour 6 dossiers))
+```{r}
+data_art |>
+  select(c(all_of(starts_with("eval_distance")), "pronostic_dichotomie", "deces_rea")) |>
+  filter(eval_distance == "1") |>
+  filter(if_all(starts_with('eval_distance_score___'), ~ .x == "0"))
+```
+### Délai entre l'évaluation à distance et l'hospitalisation
+#### 17 délais négatifs, dossiers à revoir
+```{r}
+data_art |>
+  filter(deces_rea == "0") |>
+  mutate(delai_evaluation = as_date(evaluation_distance_date) - as_date(sortie_date)) |>
+  filter(delai_evaluation < 0) |>
+  select(record_id, centre_inclusion, delai_evaluation)
+```
+#### 279 évaluations avant 3 mois
+Cohorte de Bicêtre revue le 05/04/2026, toutes les évaluations de moins de 3 mois sont des patients qui sont ensuite perdus de vue ou pour lesquels nous sommes en attente de récupérer les CR de centres/hopitaux hors AP-HP.
+Faut-il les exclure, ou considérer que c'est le pire score neurologique qu'on puisse estimer ?
+```{r}
+data_art |>
+  filter(deces_rea == "0") |>
+  mutate(delai_evaluation = as_date(evaluation_distance_date) - as_date(sortie_date)) |>
+  filter(delai_evaluation < 90) |>
+  select(record_id, centre_inclusion, delai_evaluation)
+```
+#### 49 évaluations après 2 ans
+```{r}
+data_art |>
+  filter(deces_rea == "0") |>
+  mutate(delai_evaluation = as_date(evaluation_distance_date) - as_date(sortie_date)) |>
+  filter(delai_evaluation > 730) |>
+  select(record_id, centre_inclusion, delai_evaluation)
+```
+
+## Graphiques
+### Inclusions cumulatives par centre au cours du temps
+
+```{r}
+data_art |>
+  select(rfstdtc, diagnostic.factor, centre_inclusion.factor) |>
+  filter(!is.na(centre_inclusion.factor)) |>
+  group_by(rfstdtc, diagnostic.factor, centre_inclusion.factor) |>
+  count() |>
+  ungroup() |>
+  mutate(nb_inclusions_cumulatives = cumsum(n)) |>
+  group_by(centre_inclusion.factor) |>
+  mutate(nb_inclusions_cumulatives_par_centre = cumsum(n)) |>
+  ungroup() |>
+  group_by(diagnostic.factor) |>
+  mutate(nb_inclusions_cumulatives_par_diagnostic = cumsum(n)) |>
+  ggplot(aes(rfstdtc)) + geom_line(aes(y = nb_inclusions_cumulatives_par_centre, col = centre_inclusion.factor)) + labs(x = "Date d'inclusion", y = "Nombre d'inclusions", col = "Centre d'inclusion")
+```
+
+### Inclusions par centre et par pathologie
+```{r}
+data_art |>
+  filter(!is.na(centre_inclusion.factor) & !is.na(diagnostic.factor)) |>
+  group_by(centre_inclusion.factor, diagnostic.factor) |>
+  count() |>
+  ggplot() + geom_col(aes(x = diagnostic.factor, y = n, fill = centre_inclusion.factor), position = "dodge") + scale_fill_npg() + labs(x = NULL, y = "Nombre d'inclusions", fill = "Centre d'inclusion") + coord_flip()
+```
+
+### Modalités d'admission des patients
+```{r}
+data_art |>
+  filter(!is.na(mode_admission.factor) & !is.na(admission_ggnc_pdses.factor)) |>
+  ggplot() + geom_bar(aes(x = admission_ggnc_pdses.factor, fill = mode_admission.factor), position = 'fill') + scale_y_continuous(labels = scales::percent) + scale_fill_npg() + labs(x = NULL, y = "Pourcentage", fill = "Mode d'admission")
+```
+
+### Mortalité en réanimation selon le type d'affection
+```{r}
+data_art |>
+  filter(!is.na(deces_rea.factor) & !is.na(diagnostic.factor)) |>
+  ggplot() + geom_bar(aes(x = diagnostic.factor, fill = deces_rea.factor), position = 'fill') + coord_flip() + scale_y_continuous(labels = scales::percent) + scale_fill_npg() + labs(x = NULL, y = "Pourcentage", fill = "Décès en réanimation")
+```
+
+### Répartition des modalités de la gravité du devenir
+
+#### mRs détaillé
+
+##### Pour tous les patients
+```{r}
+data_art |>
+  filter(!is.na(eval_distance_score_mrs)) |>
+  ggplot(aes(x = "", fill = eval_distance_score_mrs)) + geom_bar(position = "fill") + coord_flip() + scale_y_continuous(labels = scales::percent) + labs(x = NULL, y = NULL, fill = "mRs score")
+```
+
+##### Pour les patients avec un GCS < 8
+```{r}
+data_art |>
+  filter(!is.na(eval_distance_score_mrs) & gcs_total_pire_24_heures < 8) |>
+  ggplot(aes(x = "", fill = eval_distance_score_mrs)) + geom_bar(position = "fill") + coord_flip() + scale_y_continuous(labels = scales::percent) + labs(x = NULL, y = NULL, fill = "mRs score")
+```
+
+##### Stratifié par pathologie
+```{r}
+data_art |>
+  filter(!is.na(eval_distance_score_mrs) & !is.na(diagnostic.factor)) |>
+  ggplot(aes(x = diagnostic.factor, fill = eval_distance_score_mrs)) + geom_bar(position = "fill") + coord_flip() + scale_y_continuous(labels = scales::percent) + labs(x = NULL, y = NULL, fill = "Score mRS")
+```
+
+#### mRs dichotomique
+##### Tous les patients
+```{r}
+data_art |>
+  filter(!is.na(pronostic_dichotomie)) |>
+  ggplot(aes(x = "", fill = factor(pronostic_dichotomie, levels = c("Bon pronostic", "Mauvais pronostic", "Décès en réanimation")))) + geom_bar(position = "fill") + coord_flip() + scale_y_continuous(labels = scales::percent) + labs(x = NULL, y = NULL, fill = "Score mRS dichotomisé") + scale_fill_npg()
+```
+
+##### Score de GCS < 8
+```{r}
+data_art |>
+  filter(!is.na(pronostic_dichotomie) & gcs_total_pire_24_heures < 8) |>
+  ggplot(aes(x = "", fill = factor(pronostic_dichotomie, levels = c("Bon pronostic", "Mauvais pronostic", "Décès en réanimation")))) + geom_bar(position = "fill") + coord_flip() + scale_y_continuous(labels = scales::percent) + labs(x = NULL, y = NULL, fill = "Score mRS dichotomisé") + scale_fill_npg()
+```
+
+##### Score de GCS > 8
+```{r}
+data_art |>
+  filter(!is.na(pronostic_dichotomie) & gcs_total_pire_24_heures > 8) |>
+  ggplot(aes(x = "", fill = factor(pronostic_dichotomie, levels = c("Bon pronostic", "Mauvais pronostic", "Décès en réanimation")))) + geom_bar(position = "fill") + coord_flip() + scale_y_continuous(labels = scales::percent) + labs(x = NULL, y = NULL, fill = "Score mRS dichotomisé") + scale_fill_npg()
+```
+
+##### Stratifié par pathologie
+```{r}
+data_art |>
+  filter(!is.na(eval_distance_score_mrs) & !is.na(diagnostic.factor)) |>
+  ggplot(aes(x = diagnostic.factor, fill = factor(pronostic_dichotomie, levels = c("Bon pronostic", "Mauvais pronostic", "Décès en réanimation")))) + geom_bar(position = "fill") + coord_flip() + scale_y_continuous(labels = scales::percent) + labs(x = NULL, y = NULL, fill = "mRs score") + scale_fill_npg()
+```
+
+### Délai d'évaluation
+L'évaluation devait être faite autour d'un an
+```{r}
+tmp <- data_art |>
+  filter(deces_rea == "0") |>
+  mutate(delai_evaluation = as_date(evaluation_distance_date) - as_date(sortie_date)) |>
+  mutate(delai_evaluation = as.numeric(delai_evaluation))
+
+ggplot(data = tmp, aes(x = delai_evaluation)) + geom_density() + geom_function(fun = dnorm,
+                                                                               args = list(mean = mean(tmp$delai_evaluation, na.rm = TRUE),
+                                                                                           sd = sd(tmp$delai_evaluation, na.rm = TRUE)),
+                                                                                           color = "#1b98e0",
+                                                                                           size = 1)
+```
+
+
+```{r}
+summary(tmp$delai_evaluation)
+```
+
+## Table 1
+### Définition des variables d'intérêt
+```{r}
+variables_exploratoires <-  c("sex.factor", "imc", "age", "traumabase.factor", "diabete.factor", "tabac.factor", "aap.factor", "anticoagulant.factor", "rankin_score", "handicap_anterieur", "delai_admission", "osmo_prerea.factor", "intubation_prerea.factor", "norad_prerea.factor", "acr_prehosp.factor", "pas_inf_90.factor", "spo2_inf_90.factor", "diagnostic.factor", "gcs_total_pire_24_heures", "norad_rea.factor", "capteur_pic.factor", "neurochirurgie.factor", "htic.factor", "htic_pic_max", "tcd_vd_min", "dtc_ip_max", "infection_rea.factor", "sedation_rea_duree", "ventilation_rea_duree", "lata.factor", "ata.factor", "pmo.factor", "eval_distance_score_mrs")
+
+variables_exploratoires_categorielles <-  c("sex.factor", "traumabase.factor", "diabete.factor", "tabac.factor", "aap.factor", "anticoagulant.factor", "rankin_score", "handicap_anterieur", "osmo_prerea.factor", "intubation_prerea.factor", "norad_prerea.factor", "acr_prehosp.factor", "pas_inf_90.factor", "spo2_inf_90.factor", "diagnostic.factor", "norad_rea.factor", "capteur_pic.factor", "neurochirurgie.factor", "htic.factor", "infection_rea.factor", "lata.factor", "ata.factor", "pmo.factor", "eval_distance_score_mrs")
+
+non_normal <- c("imc", "age", "delai_admission", "gcs_total_pire_24_heures", "htic_pic_max", "tcd_vd_min", "dtc_ip_max", "sedation_rea_duree", "ventilation_rea_duree")
+```
+### Création du tableau de données
+```{r}
+data_art_table_one <- data_art |>
+  select(all_of(c(variables_exploratoires, variables_exploratoires_categorielles, "deces_rea.factor", "pronostic_dichotomie")))
+```
+```{r}
+data_art_table_one |>
+  count(pronostic_dichotomie)
+```
+
+### Table 1
+#### Dichotomisé sur la mort en réanimation
+```{r}
+data_art_table_one |>
+  select(-pronostic_dichotomie) |>
+  tbl_summary(
+    by = deces_rea.factor,
+    type = c(imc, age, delai_admission) ~ "continuous",
+    label = list(traumabase.factor ~ "Inclusion dans la Traumabase",
+                 diabete.factor ~ "Diabète",
+                 sex.factor ~ "Sexe",
+                 rankin_score ~ "Score de Rankin modifié avant l'admission",
+                 tabac.factor ~ "Tabagisme",
+                 aap.factor ~ "Traitement anti-agrégant plaquettaire",
+                 delai_admission ~ "Délai d'admission en heures",
+                 anticoagulant.factor ~ "Traitement anticoagulant",
+                 osmo_prerea.factor ~ "Osmothérapie pré-hospitalière",
+                 intubation_prerea.factor ~ "Intubation préhospitalière",
+                 norad_prerea.factor ~ "Noradrénaline préhospitalière",
+                 acr_prehosp.factor ~ "ACR préhospitalier",
+                 pas_inf_90.factor ~ "Episode de PAS < 90mmHg",
+                 spo2_inf_90.factor ~ "Episode de Spo2 < 90%",
+                 norad_rea.factor ~ "Noradrénaline en réanimation",
+                 capteur_pic.factor ~ "Pose d'un capteur de PIC",
+                 neurochirurgie.factor ~ "Neurochirurgie",
+                 htic.factor ~ "HTIC",
+                 infection_rea.factor ~ "Infection en réanimation",
+                 lata.factor ~ "LATA",
+                 ata.factor ~ "ATA",
+                 pmo.factor ~ "Prélèvement d'organe",
+                 eval_distance_score_mrs ~ "Score mRs à distance",
+                 handicap_anterieur ~ "Handicap antérieur",
+                 diagnostic.factor ~ "Diagnostic"
+                 ),
+    statistic = all_continuous() ~ "{median} [{p25}, {p75}]",
+    missing = "no"
+    )|>
+  add_overall() |>
+  bold_labels() |>
+  italicize_levels() |>
+  add_auto_labels(dictionary = dictionary) |>
+  add_p()
+```
+#### Dichotomisé sur le pronostic neurologique (bon, mauvais)
+```{r}
+data_art_table_one |>
+  tbl_summary(
+    by = pronostic_dichotomie,
+    type = c(imc, age, delai_admission) ~ "continuous",
+    label = list(traumabase.factor ~ "Inclusion dans la Traumabase",
+                 diabete.factor ~ "Diabète",
+                 sex.factor ~ "Sexe",
+                 rankin_score ~ "Score de Rankin modifié avant l'admission",
+                 tabac.factor ~ "Tabagisme",
+                 aap.factor ~ "Traitement anti-agrégant plaquettaire",
+                 delai_admission ~ "Délai d'admission en heures",
+                 anticoagulant.factor ~ "Traitement anticoagulant",
+                 osmo_prerea.factor ~ "Osmothérapie pré-hospitalière",
+                 intubation_prerea.factor ~ "Intubation préhospitalière",
+                 norad_prerea.factor ~ "Noradrénaline préhospitalière",
+                 acr_prehosp.factor ~ "ACR préhospitalier",
+                 pas_inf_90.factor ~ "Episode de PAS < 90mmHg",
+                 spo2_inf_90.factor ~ "Episode de Spo2 < 90%",
+                 norad_rea.factor ~ "Noradrénaline en réanimation",
+                 capteur_pic.factor ~ "Pose d'un capteur de PIC",
+                 neurochirurgie.factor ~ "Neurochirurgie",
+                 htic.factor ~ "HTIC",
+                 infection_rea.factor ~ "Infection en réanimation",
+                 lata.factor ~ "LATA",
+                 ata.factor ~ "ATA",
+                 pmo.factor ~ "Prélèvement d'organe",
+                 eval_distance_score_mrs ~ "Score mRs à distance",
+                 handicap_anterieur ~ "Handicap antérieur",
+                 diagnostic.factor ~ "Diagnostic"
+                 ),
+    statistic = all_continuous() ~ "{median} [{p25}, {p75}]",
+    missing = "no"
+    )|>
+  add_overall() |>
+  bold_labels() |>
+  italicize_levels() |>
+  add_auto_labels(dictionary = dictionary) |>
+  add_p()
+```
+#### En fonction de la pathologie
+
+```{r}
+data_art_table_one |>
+  tbl_summary(
+    by = diagnostic.factor,
+    type = c(imc, age, delai_admission) ~ "continuous",
+    label = list(traumabase.factor ~ "Inclusion dans la Traumabase",
+                 diabete.factor ~ "Diabète",
+                 sex.factor ~ "Sexe",
+                 rankin_score ~ "Score de Rankin modifié avant l'admission",
+                 tabac.factor ~ "Tabagisme",
+                 aap.factor ~ "Traitement anti-agrégant plaquettaire",
+                 delai_admission ~ "Délai d'admission en heures",
+                 anticoagulant.factor ~ "Traitement anticoagulant",
+                 osmo_prerea.factor ~ "Osmothérapie pré-hospitalière",
+                 intubation_prerea.factor ~ "Intubation préhospitalière",
+                 norad_prerea.factor ~ "Noradrénaline préhospitalière",
+                 acr_prehosp.factor ~ "ACR préhospitalier",
+                 pas_inf_90.factor ~ "Episode de PAS < 90mmHg",
+                 spo2_inf_90.factor ~ "Episode de Spo2 < 90%",
+                 norad_rea.factor ~ "Noradrénaline en réanimation",
+                 capteur_pic.factor ~ "Pose d'un capteur de PIC",
+                 neurochirurgie.factor ~ "Neurochirurgie",
+                 htic.factor ~ "HTIC",
+                 infection_rea.factor ~ "Infection en réanimation",
+                 lata.factor ~ "LATA",
+                 ata.factor ~ "ATA",
+                 pmo.factor ~ "Prélèvement d'organe",
+                 eval_distance_score_mrs ~ "Score mRs à distance",
+                 handicap_anterieur ~ "Handicap antérieur",
+                 pronostic_dichotomie ~ "Score mRs dichotomisé"
+                 ),
+    statistic = all_continuous() ~ "{median} [{p25}, {p75}]",
+    missing = "no"
+    )|>
+  add_overall() |>
+  bold_labels() |>
+  italicize_levels() |>
+  add_auto_labels(dictionary = dictionary) |>
+  add_p()
+```
+## Modélisation statistique
+### Survie
+#### Sélection des variables d'intérêt
+```{r}
+data_art_survie <- data_art |>
+  select(centre_inclusion.factor, age, sex.factor, handicap_anterieur, date_admission, gcs_total_pire_24_heures, delai_admission, aap.factor, anticoagulant.factor, diagnostic.factor, deces_rea, deces_total, date_admission, date_deces, temps_survie, evaluation_distance_date)
+```
+#### Tableau des données manquantes des variables d'intérêt
+```{r}
+data_art_survie |>
+  select(temps_survie, deces_rea, gcs_total_pire_24_heures, handicap_anterieur, age, sex.factor, delai_admission, aap.factor, anticoagulant.factor, diagnostic.factor) |>
+  ff_glimpse()
+```
+#### Construction du modèle de Cox
+```{r}
+fit <- coxph (Surv(temps_survie, deces_rea) ~ gcs_total_pire_24_heures + handicap_anterieur + age + sex.factor + delai_admission + aap.factor + anticoagulant.factor + diagnostic.factor, data = data_art_survie) 
+```
+```{r}
+tbl_regression(fit, exponentiate = TRUE, label = list(
+                 gcs_total_pire_24_heures ~ "Glasgow le plus bas à H24",
+                 sex.factor ~ "Sexe",
+                 aap.factor ~ "Traitement anti-agrégant plaquettaire",
+                 delai_admission ~ "Délai d'admission en heures",
+                 anticoagulant.factor ~ "Traitement anticoagulant",
+                 diagnostic.factor ~ "Diagnostic à l'admission",
+                 handicap_anterieur ~ "Handicap antérieur"
+                 ))
+```
+
+```{r}
+survfit2(Surv(temps_survie, deces_total) ~ 1, data = data_art_survie) |> 
+  ggsurvfit() +
+  labs(
+    x = "Jours",
+    y = "Probabilité de survie"
+  ) +
+  scale_ggsurvfit(x_scales = list(limits = c(0, 365))) +
+  add_confidence_interval() +
+  add_risktable() + 
+  theme_ggsurvfit_KMunicate() +
+  theme(legend.position="inside", legend.position.inside = c(0.85, 0.85))
+```
+```{r}
+survfit(Surv(temps_survie, deces_total) ~ 1, data = data_art_survie) |> 
+  tbl_survfit(times = c(7,30),
+              label_header = "J{time}",
+              label = "Survie (%)")
+```
+
+```{r}
+p <- survfit2(Surv(temps_survie, deces_total) ~ diagnostic.factor, data = data_art_survie) |> 
+  ggsurvfit() +
+  labs(
+    x = "Days",
+    y = "Probabilité de survie"
+  ) +
+  scale_ggsurvfit(x_scales = list(limits = c(0, 30))) +
+  add_risktable() +
+  add_risktable_strata_symbol(symbol = "\U25CF", size = 10) +
+  theme_ggsurvfit_KMunicate() +
+  theme(legend.position="inside", legend.position.inside = c(0.20, 0.50))
+```
+
+
+```{r}
+ggsave("p.png", dpi = "print", width = 210, height = 297, units = "mm")
+```
+
+```{r}
+survfit(Surv(temps_survie, deces_total) ~ diagnostic.factor, data = data_art_survie) |> 
+  tbl_survfit(times = 7,
+              label_header = "**Survie à 7 jours en fonction de la pathologie (IC 95%)**",
+              label = "Pathologie")
+```
+### Pronostic neurologique à distance
+#### Sélection des variables d'intérêt
+```{r}
+data_art_pronostic <- data_art |>
+  select(centre_inclusion.factor, age, sex.factor, handicap_anterieur, gcs_total_pire_24_heures, delai_admission, aap.factor, anticoagulant.factor, diagnostic.factor, spo2_inf_90.factor, pas_inf_90.factor, norad_rea.factor, osmo_rea.factor, htic.factor, htic_pic_max, neurochirurgie.factor, infection_rea.factor, ventilation_rea.factor, pronostic_dichotomie) |>
+  filter(pronostic_dichotomie != "Décès en réanimation") |>
+  mutate(gcs_total_pire_24_heures = as.numeric(gcs_total_pire_24_heures)) |>
+  mutate(neurochirurgie.factor = relevel(neurochirurgie.factor, ref = "Non")) |>
+  mutate(infection_rea.factor = relevel(infection_rea.factor, ref = "Non")) |>
+  mutate(norad_rea.factor = relevel(norad_rea.factor, ref = "Non")) |>
+  mutate(osmo_rea.factor = relevel(osmo_rea.factor, ref = "Non")) |>
+  mutate(htic.factor = relevel(htic.factor, ref = "Non")) |>
+  mutate(ventilation_rea.factor = relevel(ventilation_rea.factor, ref = "Non")) |>
+  mutate(aap.factor = relevel(aap.factor, ref = "Non")) |>
+  mutate(anticoagulant.factor = relevel(anticoagulant.factor, ref = "Non")) |>
+  mutate(pas_inf_90.factor = relevel(pas_inf_90.factor, ref = "Non")) |>
+  mutate(spo2_inf_90.factor = relevel(spo2_inf_90.factor, ref = "Non"))
+```
+
+```{r}
+fit_pronostic <- glm(as_factor(pronostic_dichotomie) ~ age + sex.factor + handicap_anterieur + delai_admission + aap.factor + anticoagulant.factor + gcs_total_pire_24_heures + spo2_inf_90.factor + pas_inf_90.factor + diagnostic.factor + osmo_rea.factor + norad_rea.factor + ventilation_rea.factor + htic.factor + neurochirurgie.factor + infection_rea.factor, family = binomial, data = data_art_pronostic)
+```
+
+```{r}
+summary(fit_pronostic)
+```
+
+```{r}
+tbl_regression(fit_pronostic, exponentiate = TRUE,
+               label = list(
+                 age ~ "Age",
+                 gcs_total_pire_24_heures ~ "Plus bas score de Glasgow à 24 heures",
+                 sex.factor ~ "Sexe",
+                 aap.factor ~ "Traitement anti-agrégant plaquettaire",
+                 delai_admission ~ "Délai d'admission en heures",
+                 anticoagulant.factor ~ "Traitement anticoagulant",
+                 pas_inf_90.factor ~ "Episode de PAS < 90mmHg",
+                 spo2_inf_90.factor ~ "Episode de Spo2 < 90%",
+                 norad_rea.factor ~ "Noradrénaline en réanimation",
+                 neurochirurgie.factor ~ "Neurochirurgie",
+                 htic.factor ~ "HTIC",
+                 infection_rea.factor ~ "Infection en réanimation",
+                 handicap_anterieur ~ "Handicap antérieur",
+                 diagnostic.factor ~ "Type d'atteinte",
+                 osmo_rea.factor ~ "Osmothérapie en réanimation",
+                 ventilation_rea.factor ~ "Ventilation en réanimation"
+                 ))
+```
+
+
+
+
