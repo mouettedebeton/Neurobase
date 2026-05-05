@@ -11,6 +11,9 @@ library(DT)
 library(lubridate)
 library(scales)
 library(tidyr)
+library(shinyWidgets)
+library(ggsci)
+library(forcats)
 
 # ---- Chargement & préparation des données ------------------
 df_raw <- readRDS("data.rds")
@@ -41,7 +44,12 @@ df <- df_raw %>%
     deces_total   = as.numeric(deces_total),
     pronostic     = as.character(pronostic_dichotomie),
     hta           = as.character(hta.factor),
-    diabete       = as.character(diabete.factor),
+    diabete       = case_match(diabete.factor,
+                               "Non" ~ "Non",
+                               "Non disponible" ~ "Non disponible",
+                               "Type 1" ~ "Type 1",
+                               "Type 2 insulino-requerant" ~ "Type 2",
+                               "Type 2 non insulino-requerant" ~ "Type 2"),
     tabac         = as.character(tabac.factor),
     rankin_pre    = as.numeric(rankin_score),
     ventilation   = as.character(ventilation_rea.factor),
@@ -57,8 +65,7 @@ df <- df_raw %>%
     duree_sejour  = as.numeric(sortie_date - date_admission),
     # GCS pré-hospit (combiné)
     gcs_initial   = coalesce(as.numeric(gcs_total_prerea_admission),
-                             as.numeric(gcs_total_detail_admission),
-                             as.numeric(gcs_total_admission)),
+                             as.numeric(gcs_total_detail_admission)),
     # Scores spécifiques
     hsa_wfns      = as.numeric(hsa_wfns),
     hsa_fisher    = as.numeric(hsa_fisher_modifiee),
@@ -71,6 +78,14 @@ df <- df_raw %>%
 # Plages de dates pour slider
 date_min <- min(df$date_admission, na.rm = TRUE)
 date_max <- max(df$date_admission, na.rm = TRUE)
+
+# Plages de GCS pour le slider 
+gcs_pire24_min <- min(df$gcs_pire24, na.rm = TRUE)
+gcs_pire24_max <- max(df$gcs_pire24, na.rm = TRUE)
+
+# Plages d'âge pour le slider 
+age_min <- min(df$age, na.rm = TRUE)
+age_max <- max(df$age, na.rm = TRUE)
 
 # Listes pour filtres
 diagnostics_dispo <- sort(unique(na.omit(df$diagnostic)))
@@ -96,7 +111,7 @@ pal_centre <- c(
 
 # ---- Thème ggplot ------------------------------------------
 theme_dashboard <- function() {
-  theme_minimal(base_size = 13) +
+  theme_minimal(base_size = 12) +
     theme(
       plot.background  = element_rect(fill = "#f8f9fa", color = NA),
       panel.background = element_rect(fill = "#f8f9fa", color = NA),
@@ -105,7 +120,7 @@ theme_dashboard <- function() {
       axis.title       = element_text(color = "#495057", size = 11),
       axis.text        = element_text(color = "#6c757d"),
       legend.position  = "bottom",
-      plot.title       = element_text(face = "bold", color = "#212529", size = 13),
+      plot.title       = element_text(face = "bold", color = "#212529", size = 12),
       strip.text       = element_text(face = "bold", color = "#495057")
     )
 }
@@ -143,7 +158,7 @@ ui <- page_navbar(
   sidebar = sidebar(
     width = 270,
     bg = "#f1f3f5",
-    h5("🔧 Filtres globaux", style = "color:#1D3557;font-weight:700;"),
+    h5("Filtres globaux", style = "color:#1D3557;font-weight:700;"),
     hr(),
     checkboxGroupInput(
       "filtre_diag", "Pathologie(s)",
@@ -157,6 +172,20 @@ ui <- page_navbar(
       selected = centres_dispo
     ),
     hr(),
+    numericRangeInput(
+      "filtre_pire_gcs", "Pire Glasgow à H24",
+      min = gcs_pire24_min,
+      max = gcs_pire24_max,
+      value = c(gcs_pire24_min, gcs_pire24_max),
+      separator = "→"
+    ),
+    numericRangeInput(
+      "filtre_age", "Âge à l'inclusion",
+      min = age_min,
+      max = age_max,
+      value = c(age_min, age_max),
+      separator = "→"
+    ),
     dateRangeInput(
       "filtre_dates", "Période d'admission",
       start = date_min,
@@ -164,8 +193,14 @@ ui <- page_navbar(
       min   = date_min,
       max   = date_max,
       language = "fr",
-      separator = "→"
+      separator = "→",
+      format = "dd-mm-yyyy"
     ),
+    sliderInput("filtre_dates_2",
+                "",
+                min = date_min,
+                max = date_max,
+                value=c(date_min, date_max)),
     hr(),
     actionButton("reset_filters", "↺ Réinitialiser", class = "btn-outline-secondary btn-sm w-100")
   ),
@@ -194,14 +229,17 @@ ui <- page_navbar(
       )
     ),
     layout_columns(
-      col_widths = c(12),
+      col_widths = c(6, 6),
       card(
         card_header("Timeline des inclusions (par date d'admission)"),
-        plotlyOutput("plot_timeline", height = "280px")
+          plotlyOutput("plot_timeline", height = "280px")
+      ),
+      card(
+        card_header("Inclusions cumulatives (par centre)"),
+        plotlyOutput("plot_inclusion_cum", height = "280px")
       )
     )
   ),
-
   # ─── ONGLET 2 : DÉMOGRAPHIE ──────────────────────────────
   nav_panel(
     title = "👤 Démographie",
@@ -239,7 +277,8 @@ ui <- page_navbar(
     title = "📈 Devenir & Mortalité",
     padding = 20,
     layout_columns(
-      col_widths = c(4, 4, 4),
+      col_widths = c(3, 3, 3, 3),
+      uiOutput("vb_suivi"),
       uiOutput("vb_deces2"),
       uiOutput("vb_edme"),
       uiOutput("vb_lata")
@@ -248,13 +287,13 @@ ui <- page_navbar(
     layout_columns(
       col_widths = c(6, 6),
       card(
-        card_header("Pronostic (dichotomie) par pathologie"),
+        card_header("mRs dichotomisé (< 3 ou > 2) par pathologie"),
         plotlyOutput("plot_pronostic", height = "340px")
       ),
       card(
-        card_header("Durée de séjour en réanimation (jours)"),
-        plotlyOutput("plot_duree_sejour", height = "340px")
-      )
+        card_header("mRS détaillé par pathologie"),
+        plotlyOutput("plot_mrs", height = "320px")
+      ),
     ),
     layout_columns(
       col_widths = c(6, 6),
@@ -263,8 +302,8 @@ ui <- page_navbar(
         plotlyOutput("plot_gcs", height = "320px")
       ),
       card(
-        card_header("mRS à distance par pathologie"),
-        plotlyOutput("plot_mrs", height = "320px")
+        card_header("Durée de séjour en réanimation (jours)"),
+        plotlyOutput("plot_duree_sejour", height = "340px")
       )
     )
   ),
@@ -281,26 +320,17 @@ ui <- page_navbar(
         layout_columns(
           col_widths = c(6, 6),
           card(
-            card_header("Classification TDB (Marshall)"),
+            card_header("Typologie des lésions (Marshall)"),
             plotlyOutput("plot_tbi_tcdb", height = "300px")
           ),
           card(
-            card_header("Mécanisme du traumatisme"),
-            plotlyOutput("plot_tbi_mecanisme", height = "300px")
-          )
-        ),
-        layout_columns(
-          col_widths = c(6, 6),
-          card(
             card_header("GCS pré-hospitalier"),
             plotlyOutput("plot_tbi_gcs", height = "300px")
-          ),
-          card(
-            card_header("HTIC & Traitement"),
-            plotlyOutput("plot_tbi_htic", height = "300px")
           )
-        )
-      ),
+        ),
+          br(),
+          DTOutput("table_tbi")
+        ),
 
       # HSA
       nav_panel("HSA",
@@ -385,8 +415,12 @@ server <- function(input, output, session) {
   observeEvent(input$reset_filters, {
     updateCheckboxGroupInput(session, "filtre_diag",   selected = diagnostics_dispo)
     updateCheckboxGroupInput(session, "filtre_centre", selected = centres_dispo)
+    updateNumericRangeInput(session, "filtre_pire_gcs", value = c(gcs_pire24_min, gcs_pire24_max))
+    updateNumericRangeInput(session, "filtre_age", value = c(age_min, age_max))
     updateDateRangeInput(session, "filtre_dates",
                          start = date_min, end = date_max)
+    updateSliderInput(session, "filtre_dates_2",
+                         value = c(date_min,date_max))
   })
 
   # Dataset filtré réactif
@@ -398,7 +432,13 @@ server <- function(input, output, session) {
         centre     %in% input$filtre_centre,
         !is.na(date_admission),
         date_admission >= input$filtre_dates[1],
-        date_admission <= input$filtre_dates[2]
+        date_admission <= input$filtre_dates[2],
+        date_admission >= input$filtre_dates_2[1],
+        date_admission <= input$filtre_dates_2[2],
+        gcs_total_pire_24_heures >= input$filtre_pire_gcs[1],
+        gcs_total_pire_24_heures <= input$filtre_pire_gcs[2],
+        age >= input$filtre_age[1],
+        age <= input$filtre_age[2]
       )
   })
 
@@ -425,10 +465,17 @@ server <- function(input, output, session) {
   })
   output$vb_deces2 <- renderUI({
     d <- df_f()
-    n <- sum(d$deces_total == 1, na.rm = TRUE)
+    n <- sum(d$deces_rea == 1, na.rm = TRUE)
     tot <- nrow(d)
     val <- if (tot > 0) sprintf("%s (%s)", n_fmt(n), pct(n, tot)) else "—"
-    value_box_custom("Décès total", val, color = "#E63946")
+    value_box_custom("Décès en réanimation", val, color = "#E63946")
+  })
+  output$vb_suivi <- renderUI({
+    d <- df_f()
+    n <- sum(d$eval_distance == 1, na.rm = TRUE)
+    tot <- nrow(d %>% filter(!is.na(eval_distance)))
+    val <- if (tot > 0) sprintf("%s (%s)", n_fmt(n), pct(n, tot)) else "—"
+    value_box_custom("Suivi à distance", val, color = "#6c757d")
   })
   output$vb_edme <- renderUI({
     n <- sum(df_f()$edme == "Oui", na.rm = TRUE)
@@ -488,6 +535,28 @@ server <- function(input, output, session) {
     ggplotly(p, tooltip = "text") %>%
       layout(paper_bgcolor = "#f8f9fa", plot_bgcolor = "#f8f9fa")
   })
+
+output$plot_inclusion_cum <- renderPlotly({
+  d <- df_f() %>%
+    select(rfstdtc, diagnostic.factor, centre_inclusion.factor) |>
+    filter(!is.na(centre_inclusion.factor)) |>
+    group_by(rfstdtc, diagnostic.factor, centre_inclusion.factor) |>
+    count() |>
+    ungroup() |>
+    mutate(nb_inclusions_cumulatives = cumsum(n)) |>
+    group_by(centre_inclusion.factor) |>
+    mutate(nb_inclusions_cumulatives_par_centre = cumsum(n)) |>
+    ungroup() |>
+    group_by(diagnostic.factor) |>
+    mutate(nb_inclusions_cumulatives_par_diagnostic = cumsum(n))
+  
+  p <- ggplot(d, aes(x = rfstdtc, y = nb_inclusions_cumulatives_par_centre, col = centre_inclusion.factor)) +
+                geom_line() +
+                labs(x = "Date d'inclusion", y = "Nombre d'inclusions", col = "Centre d'inclusion")
+  
+  ggplotly(p) %>%
+    layout(paper_bgcolor = "#f8f9fa", plot_bgcolor = "#f8f9fa")
+})
 
   # ── Démographie ─────────────────────────────────────────
   output$plot_age_box <- renderPlotly({
@@ -553,18 +622,40 @@ server <- function(input, output, session) {
       count(diagnostic, pronostic) %>%
       group_by(diagnostic) %>%
       mutate(pct = n / sum(n))
-    p <- ggplot(d, aes(x = reorder(diagnostic, -pct), y = pct, fill = pronostic,
+    p <- ggplot(d, aes(x = reorder(diagnostic, -pct), y = pct, fill = factor(pronostic, c("Bon pronostic", "Mauvais pronostic", "Décès en réanimation")),
                        text = paste0(pronostic, "<br>", round(100*pct,1), "% (N=", n, ")"))) +
       geom_col(position = "fill", width = 0.65) +
       scale_y_continuous(labels = percent_format()) +
       scale_fill_manual(values = c("Bon pronostic" = "#2A9D8F",
-                                   "Décès en réanimation" = "#E63946",
-                                   "Mauvais pronostic" = "#F4A261")) +
+                                   "Mauvais pronostic" = "#F4A261",
+                                   "Décès en réanimation" = "#E63946"
+                                   )) +
       labs(x = NULL, y = "Proportion", fill = NULL) +
-      theme_dashboard() +
-      theme(axis.text.x = element_text(angle = 30, hjust = 1))
+      theme_dashboard()
+    
     ggplotly(p, tooltip = "text") %>%
       layout(paper_bgcolor = "#f8f9fa", plot_bgcolor = "#f8f9fa")
+  })
+
+  output$plot_mrs <- renderPlotly({
+    d <-  df_f() %>%
+      filter(!is.na(mrs_distance) & !is.na(diagnostic)) %>%
+      count(diagnostic, mrs_distance) %>%
+      group_by(diagnostic) %>%
+      mutate(pct = n / sum(n))
+    
+    p <- ggplot(d, aes(x = reorder(diagnostic, -pct), y = pct, fill = mrs_distance,
+                       text = paste0(diagnostic, "<br>mRS ", mrs_distance,
+                                     "<br>", round(100*pct,1), "% (N=", n, ")"))) +
+      geom_col(position = "fill") +
+      labs(x = NULL, y = NULL, fill = "Score mRS") +
+      scale_fill_lancet() + 
+      theme_dashboard() +
+      theme(axis.text.y = element_blank(), axis.ticks.y = element_blank())
+      
+    
+    ggplotly(p, tooltip = "text") %>%
+      layout(paper_bgcolor = "#f8f9fa", plot_bgcolor = "#f8f9fa", yaxis = NULL)
   })
 
   output$plot_duree_sejour <- renderPlotly({
@@ -584,31 +675,18 @@ server <- function(input, output, session) {
   })
 
   output$plot_gcs <- renderPlotly({
-    d <- df_f() %>% filter(!is.na(gcs_initial), !is.na(diagnostic))
-    p <- ggplot(d, aes(x = gcs_initial, fill = diagnostic,
-                       text = paste0("GCS = ", gcs_initial, "<br>", diagnostic))) +
-      geom_histogram(binwidth = 1, position = "stack", color = "white") +
-      scale_fill_manual(values = pal_patho, drop = FALSE) +
-      scale_x_continuous(breaks = 3:15) +
-      labs(x = "Score GCS", y = "N patients", fill = NULL) +
-      theme_dashboard()
-    ggplotly(p, tooltip = "text") %>%
-      layout(paper_bgcolor = "#f8f9fa", plot_bgcolor = "#f8f9fa")
-  })
-
-  output$plot_mrs <- renderPlotly({
-    d <- df_f() %>%
-      filter(!is.na(mrs_distance), !is.na(diagnostic)) %>%
-      count(diagnostic, mrs_distance) %>%
+    d <- df_f() %>% 
+      filter(!is.na(gcs_initial), !is.na(diagnostic)) %>%
+      count(diagnostic, gcs_initial) %>%
       group_by(diagnostic) %>%
-      mutate(pct = n / sum(n))
-    p <- ggplot(d, aes(x = mrs_distance, y = pct, fill = diagnostic,
-                       text = paste0(diagnostic, "<br>mRS ", mrs_distance,
+      mutate(pct = n /sum(n))
+    p <- ggplot(d, aes(x = gcs_initial, y = pct, fill = diagnostic,
+                       text = paste0(diagnostic, "<br>GCS initial ", gcs_initial,
                                      "<br>", round(100*pct,1), "% (N=", n, ")"))) +
       geom_col(position = "dodge", width = 0.75) +
       scale_fill_manual(values = pal_patho, drop = FALSE) +
-      scale_y_continuous(labels = percent_format()) +
-      labs(x = "mRS à distance", y = "Proportion", fill = NULL) +
+      scale_x_continuous(breaks = 3:15) +
+      labs(x = "Score GCS", y = "Proportion", fill = NULL) +
       theme_dashboard()
     ggplotly(p, tooltip = "text") %>%
       layout(paper_bgcolor = "#f8f9fa", plot_bgcolor = "#f8f9fa")
@@ -622,48 +700,33 @@ server <- function(input, output, session) {
       mutate(tcdb = factor(tcdb_scan_classe)) %>%
       filter(!is.na(tcdb)) %>%
       count(tcdb)
-    p <- plot_ly(d, x = ~tcdb, y = ~n, type = "bar",
-                 marker = list(color = "#E63946"),
-                 hovertemplate = "Marshall classe %{x}<br>N = %{y}<extra></extra>") %>%
-      layout(xaxis = list(title = "Classe Marshall (TDB)"),
-             yaxis = list(title = "N patients"),
-             paper_bgcolor = "#f8f9fa", plot_bgcolor = "#f8f9fa")
-    p
-  })
-
-  output$plot_tbi_mecanisme <- renderPlotly({
-    d <- df_tbi() %>%
-      filter(!is.na(mecanisme_trauma.factor)) %>%
-      count(mecanisme = as.character(mecanisme_trauma.factor))
-    p <- plot_ly(d, labels = ~mecanisme, values = ~n, type = "pie",
-                 textinfo = "label+percent",
-                 hovertemplate = "%{label}<br>N = %{value}<extra></extra>") %>%
-      layout(showlegend = TRUE, paper_bgcolor = "#f8f9fa")
-    p
-  })
-
-  output$plot_tbi_gcs <- renderPlotly({
-    d <- df_tbi() %>% filter(!is.na(gcs_initial))
-    p <- ggplot(d, aes(x = gcs_initial,
-                       text = paste0("GCS pré-hospit = ", gcs_initial))) +
-      geom_histogram(binwidth = 1, fill = "#E63946", color = "white") +
-      scale_x_continuous(breaks = 3:15) +
-      labs(x = "Score GCS", y = "N patients") +
+    
+    p <- ggplot(d, aes(x = tcdb, y = n, fill = tcdb, 
+                    text = paste0("Classe Marshall ", tcdb, "<br> N =", n))) + 
+      geom_col() +
+      labs(x = "Classification de Marshall", y = "Nombre de patients") +
+      guides(fill = FALSE) +
+      scale_fill_nejm() +
       theme_dashboard()
+    
     ggplotly(p, tooltip = "text") %>%
       layout(paper_bgcolor = "#f8f9fa", plot_bgcolor = "#f8f9fa")
   })
 
-  output$plot_tbi_htic <- renderPlotly({
-    d <- df_tbi() %>%
-      filter(!is.na(htic)) %>%
-      count(htic)
-    p <- plot_ly(d, labels = ~htic, values = ~n, type = "pie",
-                 marker = list(colors = c("#E63946", "#2A9D8F", "#dee2e6")),
-                 textinfo = "label+percent",
-                 hovertemplate = "%{label}<br>N = %{value}<extra></extra>") %>%
-      layout(title = "HTIC diagnostiquée", paper_bgcolor = "#f8f9fa")
-    p
+  output$plot_tbi_gcs <- renderPlotly({
+    d <- df_tbi() %>% 
+      filter(!is.na(gcs_initial)) %>% 
+      mutate(gcs_initial = as_factor(gcs_initial))
+    
+    p <- ggplot(d, aes(x = gcs_initial, fill = factor(gcs_initial),
+                       text = paste0(..count..))) +
+      geom_bar() +
+      labs(x = "Score de Glasgow", y = "Nombre de patients") +
+      guides(fill = FALSE) +
+      theme_dashboard()
+    
+    ggplotly(p, tooltip = "text") %>%
+      layout(paper_bgcolor = "#f8f9fa", plot_bgcolor = "#f8f9fa")
   })
 
   # ── Par pathologie : HSA ─────────────────────────────────
@@ -699,7 +762,7 @@ server <- function(input, output, session) {
                  marker = list(colors = c("#E63946", "#2A9D8F", "#dee2e6")),
                  textinfo = "label+percent",
                  hovertemplate = "%{label}<br>N = %{value}<extra></extra>") %>%
-      layout(paper_bgcolor = "#f8f9fa")
+      layout(paper_bgcolor = "#f8f9fa", showlegend= FALSE)
     p
   })
 
@@ -710,7 +773,7 @@ server <- function(input, output, session) {
     p <- plot_ly(d, labels = ~ttt, values = ~n, type = "pie",
                  textinfo = "label+percent",
                  hovertemplate = "%{label}<br>N = %{value}<extra></extra>") %>%
-      layout(paper_bgcolor = "#f8f9fa")
+      layout(paper_bgcolor = "#f8f9fa", showlegend= FALSE)
     p
   })
 
@@ -720,7 +783,7 @@ server <- function(input, output, session) {
   output$plot_avc_nihss <- renderPlotly({
     d <- df_avc() %>% filter(!is.na(nihss))
     p <- ggplot(d, aes(x = nihss, text = paste0("NIHSS = ", nihss))) +
-      geom_histogram(binwidth = 2, fill = "#2A9D8F", color = "white") +
+      geom_histogram(binwidth = 1, fill = "#2A9D8F", color = "white") +
       labs(x = "Score NIHSS", y = "N patients") +
       theme_dashboard()
     ggplotly(p, tooltip = "text") %>%
@@ -791,7 +854,19 @@ server <- function(input, output, session) {
                 filter = "top",
                 class = "table-hover table-striped")
   })
-}
 
+output$table_tbi <- renderDT({
+  req(input$select_centre_table)
+  df_f() %>%
+    filter(diagnostic == "TC") %>%
+    select(any_of(cols_table)) %>%
+    mutate(date_admission = as.character(date_admission)) %>%
+    datatable(extensions = "Buttons",
+              options = dt_options,
+              rownames = FALSE,
+              filter = "top",
+              class = "table-hover table-striped")
+  })
+}
 # ---- Lancement ---------------------------------------------
 shinyApp(ui, server)
