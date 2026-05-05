@@ -11,7 +11,6 @@ library(DT)
 library(lubridate)
 library(scales)
 library(tidyr)
-library(shinyWidgets)
 library(ggsci)
 library(forcats)
 
@@ -172,19 +171,18 @@ ui <- page_navbar(
       selected = centres_dispo
     ),
     hr(),
-    numericRangeInput(
+    sliderInput(
       "filtre_pire_gcs", "Pire Glasgow à H24",
       min = gcs_pire24_min,
       max = gcs_pire24_max,
       value = c(gcs_pire24_min, gcs_pire24_max),
-      separator = "→"
+      step = 1
     ),
-    numericRangeInput(
+    sliderInput(
       "filtre_age", "Âge à l'inclusion",
       min = age_min,
-      max = age_max,
-      value = c(age_min, age_max),
-      separator = "→"
+      max = 105,
+      value = c(age_min, 105)
     ),
     dateRangeInput(
       "filtre_dates", "Période d'admission",
