@@ -15,7 +15,15 @@ library(ggsci)
 library(forcats)
 
 # ---- Chargement & préparation des données ------------------
-df_raw <- readRDS("data.rds")
+df_raw <- readRDS("data.rds") %>%
+  select(age, diagnostic.factor, rfstdtc, centre_inclusion.factor, sex.factor, age, imc, date_admission, date_symptomes, sortie_date,
+         date_deces, sortie_date, gcs_total_admission, gcs_total_prerea_admission, deces_rea, deces_total, pronostic_dichotomie, 
+         hta.factor, diabete.factor, tabac.factor, rankin_score, ventilation_rea.factor, ventilation_rea_duree, infection_rea.factor, 
+         lata.factor, edme.factor, gos_sortie, gose_sortie, delai_admission, hsa_wfns, eval_distance_score_mrs, gcs_total_detail_admission,
+         hsa_fisher_modifiee, aic_nihss, tcdb_scan_classe, gcs_total_pire_24_heures, htic.factor, htic_pic_max, capteur_pic.factor, neurochirurgie.factor, 
+         sedation_rea.factor, sedation_rea_duree, ventilation_rea.factor, ventilation_rea_duree, ata.factor, deces_rea.factor, trachetomie.factor,
+         infection_rea.factor, hsa_anevrysme_traitement_type.factor, hsa_vasospasme.factor, eval_distance, starts_with("htic_traitement___"), 
+         starts_with("sedation_rea_type___"), starts_with("neurochirurgie_type___"), aic_thrombolyse, aic_thrombectomie)
 
 # Conversion des dates clés
 df_raw$date_admission  <- as.Date(df_raw$date_admission)
@@ -70,8 +78,46 @@ df <- df_raw %>%
     hsa_fisher    = as.numeric(hsa_fisher_modifiee),
     nihss         = as.numeric(aic_nihss),
     gcs_pire24    = as.numeric(gcs_total_pire_24_heures),
-    htic          = as.character(htic.factor),
-    neurochir     = as.character(neurochirurgie.factor)
+    # --- Réanimation ---
+    htic_yn       = as.character(htic.factor),
+    pic_max       = as.numeric(htic_pic_max),
+    capteur_pic   = as.character(capteur_pic.factor),
+    neurochir     = as.character(neurochirurgie.factor),
+    sedation      = as.character(sedation_rea.factor),
+    duree_sedation= as.numeric(sedation_rea_duree),
+    ventilation   = as.character(ventilation_rea.factor),
+    duree_ventil  = as.numeric(ventilation_rea_duree),
+    lata          = as.character(lata.factor),
+    ata           = as.character(ata.factor),
+    edme          = as.character(edme.factor),
+    deces_rea_f   = as.character(deces_rea.factor),
+    tracheotomie  = as.character(trachetomie.factor),
+    infection_rea = as.character(infection_rea.factor),
+    # HTIC traitements
+    htic_ttt_sedation   = as.numeric(htic_traitement___1),
+    htic_ttt_curare     = as.numeric(htic_traitement___2),
+    htic_ttt_normotherm = as.numeric(htic_traitement___3),
+    htic_ttt_hypotherm  = as.numeric(htic_traitement___4),
+    htic_ttt_dve        = as.numeric(htic_traitement___5),
+    htic_ttt_craniect   = as.numeric(htic_traitement___6),
+    htic_ttt_burst      = as.numeric(htic_traitement___7),
+    htic_ttt_osmo       = as.numeric(htic_traitement___8),
+    htic_ttt_hypocapnie = as.numeric(htic_traitement___9),
+    htic_ttt_lombaire   = as.numeric(htic_traitement___11),
+    # Sédation types
+    sed_midazolam = as.numeric(sedation_rea_type___1),
+    sed_ketamine  = as.numeric(sedation_rea_type___2),
+    sed_propofol  = as.numeric(sedation_rea_type___3),
+    sed_dexmede   = as.numeric(sedation_rea_type___4),
+    sed_clonidine = as.numeric(sedation_rea_type___5),
+    # Neurochir types
+    nc_evacuation    = as.numeric(neurochirurgie_type___1),
+    nc_dve           = as.numeric(neurochirurgie_type___2),
+    nc_clipping      = as.numeric(neurochirurgie_type___3),
+    nc_craniect_hemi = as.numeric(neurochirurgie_type___4),
+    nc_autre         = as.numeric(neurochirurgie_type___5),
+    nc_craniect_fp   = as.numeric(neurochirurgie_type___6),
+    nc_dvp           = as.numeric(neurochirurgie_type___7)
   )
 
 # Plages de dates pour slider
@@ -130,19 +176,68 @@ value_box_custom <- function(title, value, icon = NULL, color = "#457B9D") {
     style = glue::glue("background:{color};color:white;border-radius:10px;padding:18px 20px;
                         box-shadow:0 2px 8px rgba(0,0,0,.12);height:100%;"),
     div(style = "font-size:0.85rem;opacity:0.85;margin-bottom:4px;", title),
-    div(style = "font-size:2rem;font-weight:700;line-height:1;", value)
+    div(style = "font-size:1.7rem;font-weight:700;line-height:1;", value)
   )
 }
 
 n_fmt <- function(x) format(x, big.mark = " ", nsmall = 0)
-pct   <- function(x, n) sprintf("%.1f%%", 100 * x / n)
+pct   <- function(x, n) sprintf("%.0f%%", 100 * x / n)
+
+prop_bar_plot <- function(data, var, y_label, by_col, pal_vec = pal_patho) {
+  d <- data %>%
+    filter(!is.na(.data[[var]]), !is.na(.data[[by_col]])) %>%
+    count(.data[[by_col]], val = .data[[var]]) %>%
+    group_by(.data[[by_col]]) %>%
+    mutate(pct = n / sum(n)) %>%
+    filter(val == "Oui")
+  if (nrow(d) == 0) return(plotly_empty())
+  p <- ggplot(d, aes(x = reorder(.data[[by_col]], pct), y = pct,
+                     fill = .data[[by_col]],
+                     text = paste0(.data[[by_col]], "<br>",
+                                   round(100*pct,1), "% (N=", n, ")"))) +
+    geom_col(width = 0.6) +
+    scale_fill_manual(values = pal_vec, drop = FALSE) +
+    scale_y_continuous(labels = percent_format(accuracy = 1), limits = c(0,1)) +
+    labs(x = NULL, y = y_label) + coord_flip() +
+    theme_dashboard() + theme(legend.position = "none")
+  ggplotly(p, tooltip = "text") %>%
+    layout(paper_bgcolor = "#f8f9fa", plot_bgcolor = "#f8f9fa")
+}
+
+# ---- Variables pour données manquantes ----------------------
+vars_missing <- list(
+  "Démographie"  = c("age","sexe","imc","rankin_pre"),
+  "Admission"    = c("gcs_initial","delai_adm_h","pas_admission",
+                     "fc_admission"),
+  "Réanimation"  = c("htic_yn","pic_max","capteur_pic","neurochir",
+                     "sedation","ventilation",
+                     "lata","ata","edme","deces_rea_f"),
+  "Devenir"      = c("deces_total","duree_sejour","mrs_distance")
+)
+
+labels_missing <- c(
+  age="Âge", sexe="Sexe", imc="IMC", rankin_pre="mRS pré-morbide",
+  gcs_initial="GCS initial", delai_adm_h="Délai symptômes→admission (h)",
+  pas_admission="PAS admission", pam_admission="PAM admission",
+  fc_admission="FC admission", temp_admission="Température admission",
+  hsa_wfns="Score WFNS", hsa_fisher="Fisher modifié",
+  nihss="NIHSS", tcdb_scan_classe="Marshall (TDB)", mecanisme_trauma="Mécanisme TBI",
+  htic_yn="HTIC", pic_max="PIC maximale (mmHg)", capteur_pic="Capteur PIC",
+  neurochir="Neurochirurgie", sedation="Sédation",
+  duree_sedation="Durée sédation (j)", ventilation="Ventilation mécanique",
+  duree_ventil="Durée ventilation (j)", lata="LATA", ata="ATA",
+  edme="EME", deces_rea_f="Décès en réanimation",
+  pronostic="Pronostic (dichotomie)", deces_total="Décès total",
+  duree_sejour="Durée de séjour (j)", mrs_distance="mRS à distance"
+)
+
 
 # ---- UI ----------------------------------------------------
 ui <- page_navbar(
   title = tags$span(
     tags$img(src = "https://cdn-icons-png.flaticon.com/512/3209/3209018.png",
              height = "28px", style = "margin-right:10px;vertical-align:middle;"),
-    "Dashboard Neurolésés — ART"
+    "Dashboard NB",
   ),
   theme = bs_theme(
     bootswatch  = "flatly",
@@ -207,14 +302,14 @@ ui <- page_navbar(
   nav_panel(
     title = "📊 Vue globale",
     padding = 20,
-    layout_columns(
-      col_widths = c(3, 3, 3, 3),
-      uiOutput("vb_n"),
-      uiOutput("vb_centres"),
-      uiOutput("vb_deces"),
-      uiOutput("vb_age")
-    ),
-    br(),
+    div(style = "min-height:90px; margin-bottom:5px;",
+      layout_columns(
+        col_widths = c(3, 3, 3, 3),
+        uiOutput("vb_n"),
+        uiOutput("vb_centres"),
+        uiOutput("vb_deces"),
+        uiOutput("vb_age")
+      )),
     layout_columns(
       col_widths = c(6, 6),
       card(
@@ -270,42 +365,81 @@ ui <- page_navbar(
     )
   ),
 
-  # ─── ONGLET 3 : DEVENIR ──────────────────────────────────
-  nav_panel(
-    title = "📈 Devenir & Mortalité",
-    padding = 20,
-    layout_columns(
-      col_widths = c(3, 3, 3, 3),
-      uiOutput("vb_suivi"),
-      uiOutput("vb_deces2"),
-      uiOutput("vb_edme"),
-      uiOutput("vb_lata")
-    ),
-    br(),
-    layout_columns(
-      col_widths = c(6, 6),
-      card(
-        card_header("mRs dichotomisé (< 3 ou > 2) par pathologie"),
-        plotlyOutput("plot_pronostic", height = "340px")
-      ),
-      card(
-        card_header("mRS détaillé par pathologie"),
-        plotlyOutput("plot_mrs", height = "320px")
-      ),
-    ),
-    layout_columns(
-      col_widths = c(6, 6),
-      card(
-        card_header("GCS à l'admission par pathologie"),
-        plotlyOutput("plot_gcs", height = "320px")
-      ),
-      card(
-        card_header("Durée de séjour en réanimation (jours)"),
-        plotlyOutput("plot_duree_sejour", height = "340px")
-      )
-    )
-  ),
 
+  # ── 3. RÉANIMATION ─────────────────────────────────────
+  nav_panel("🏥 Réanimation", padding=20,
+              div(style = "min-height:90px; margin-bottom:5px;",
+              layout_columns(col_widths=c(3,3,3,3),
+                             uiOutput("vb_rea_htic"), uiOutput("vb_rea_neurochir"),
+                             uiOutput("vb_rea_vm"),   uiOutput("vb_rea_deces")
+              )),
+            navset_tab(
+              
+              nav_panel("HTIC", br(),
+                        layout_columns(col_widths=c(6,6),
+                                       card(card_header("Capteur de PIC — par pathologie"),
+                                            plotlyOutput("plot_rea_capteur", height="300px")),
+                                       card(card_header("HTIC — par pathologie"),
+                                            plotlyOutput("plot_rea_htic", height="300px"))
+                        ),
+                        layout_columns(col_widths=c(6,6),
+                                       card(card_header("PIC maximale (mmHg)"),
+                                            plotlyOutput("plot_rea_pic_max", height="300px")),
+                                       card(card_header("Traitements de l'HTIC"),
+                                            plotlyOutput("plot_rea_htic_ttt", height="300px"))
+                        )
+              ),
+              
+              nav_panel("Neurochirurgie", br(),
+                        layout_columns(col_widths=c(6,6),
+                                       card(card_header("Recours neurochirurgie — par pathologie"),
+                                            plotlyOutput("plot_rea_neurochir_yn", height="300px")),
+                                       card(card_header("Types de gestes"),
+                                            plotlyOutput("plot_rea_neurochir_types", height="300px"))
+                        ),
+                        layout_columns(col_widths=c(6,6),
+                                       card(card_header("Neurochirurgie par centre"),
+                                            plotlyOutput("plot_rea_neurochir_centre", height="300px")),
+                                       card(card_header("Résumé"), uiOutput("info_neurochir"))
+                        )
+              ),
+              
+              nav_panel("Sédation & VM", br(),
+                        layout_columns(col_widths=c(6,6),
+                                       card(card_header("Sédation — par pathologie"),
+                                            plotlyOutput("plot_rea_sed_yn", height="280px")),
+                                       card(card_header("Molécules de sédation"),
+                                            plotlyOutput("plot_rea_sed_types", height="280px"))
+                        ),
+                        layout_columns(col_widths=c(6,6),
+                                       card(card_header("Durée de sédation (jours)"),
+                                            plotlyOutput("plot_rea_sed_duree", height="280px")),
+                                       card(card_header("Durée de ventilation mécanique (jours)"),
+                                            plotlyOutput("plot_rea_vm_duree", height="280px"))
+                        )
+              ),
+              
+              nav_panel("LAT · EME · Décès", br(),
+                        layout_columns(col_widths=c(3,3,3,3),
+                                       uiOutput("vb_rea_lata"), uiOutput("vb_rea_ata"),
+                                       uiOutput("vb_rea_edme"), uiOutput("vb_rea_deces2")
+                        ), br(),
+                        layout_columns(col_widths=c(6,6),
+                                       card(card_header("LATA — par pathologie"),
+                                            plotlyOutput("plot_rea_lata", height="300px")),
+                                       card(card_header("ATA — par pathologie"),
+                                            plotlyOutput("plot_rea_ata", height="300px"))
+                        ),
+                        layout_columns(col_widths=c(6,6),
+                                       card(card_header("EME — par pathologie"),
+                                            plotlyOutput("plot_rea_edme", height="300px")),
+                                       card(card_header("Décès en réanimation — par pathologie"),
+                                            plotlyOutput("plot_rea_deces_patho", height="300px"))
+                        )
+              )
+            )
+  ),
+  
   # ─── ONGLET 4 : PAR PATHOLOGIE ───────────────────────────
   nav_panel(
     title = "🧠 Par pathologie",
@@ -374,36 +508,63 @@ ui <- page_navbar(
       )
     )
   ),
-
-  # ─── ONGLET 5 : TABLES ───────────────────────────────────
+  
+  # ─── ONGLET 5 : DEVENIR ──────────────────────────────────
   nav_panel(
-    title = "📋 Tables",
+    title = "📈 Devenir & Mortalité",
     padding = 20,
-    navset_tab(
-      nav_panel("Table principale",
-        br(),
-        DTOutput("table_principale")
+      div(style = "min-height:90px; margin-bottom:5px;",
+      layout_columns(
+        col_widths = c(3, 3, 3, 3),
+        uiOutput("vb_suivi"),
+        uiOutput("vb_deces2"),
+        uiOutput("vb_edme"),
+        uiOutput("vb_lata")
+      )),
+    layout_columns(
+      col_widths = c(6, 6),
+      card(
+        card_header("mRs dichotomisé (< 3 ou > 2) par pathologie"),
+        plotlyOutput("plot_pronostic", height = "340px")
       ),
-      nav_panel("Par pathologie",
-        br(),
-        layout_columns(
-          col_widths = c(4),
-          selectInput("select_diag_table", "Sélectionner une pathologie :",
-                      choices = diagnostics_dispo, selected = diagnostics_dispo[1])
-        ),
-        DTOutput("table_patho")
+      card(
+        card_header("mRS détaillé par pathologie"),
+        plotlyOutput("plot_mrs", height = "320px")
       ),
-      nav_panel("Par centre",
-        br(),
-        layout_columns(
-          col_widths = c(4),
-          selectInput("select_centre_table", "Sélectionner un centre :",
-                      choices = centres_dispo, selected = centres_dispo[1])
-        ),
-        DTOutput("table_centre")
+    ),
+    layout_columns(
+      col_widths = c(6, 6),
+      card(
+        card_header("GCS à l'admission par pathologie"),
+        plotlyOutput("plot_gcs", height = "320px")
+      ),
+      card(
+        card_header("Durée de séjour en réanimation (jours)"),
+        plotlyOutput("plot_duree_sejour", height = "340px")
       )
     )
-  )
+  ),
+  # ── 6. DONNÉES MANQUANTES ──────────────────────────────
+  nav_panel("🔍 Données manquantes", padding = 20,
+             radioButtons("missing_stratif","Stratification :",
+                          choices=c("Par centre"="centre",
+                                    "Par pathologie"="diagnostic",
+                                    "Globale"="global"),
+                          selected="centre", inline=TRUE),
+            navset_tab(
+              nav_panel("Heatmap", br(),
+              layout_columns(col_widths=c(12),
+                            card(
+                              card_header("Heatmap — Taux de données manquantes (%)"),
+                              plotlyOutput("plot_missing_heatmap", height="90vh")
+                            ))),
+              nav_panel("Table", br(),
+              layout_columns(col_widths=c(12),
+                            card(
+                              card_header("Table détaillée — Données manquantes par variable et groupe"),
+                              DTOutput("table_missing", height="90%")
+                            )))
+  ))
 )
 
 # ---- SERVER ------------------------------------------------
@@ -486,6 +647,40 @@ server <- function(input, output, session) {
     tot <- nrow(df_f())
     val <- if (tot > 0) sprintf("%s (%s)", n_fmt(n), pct(n, tot)) else "—"
     value_box_custom("Décision LATA", val, color = "#F4A261")
+  })
+
+  # Value Boxes réanimation
+  output$vb_rea_htic     <- renderUI({
+    n=sum(df_f()$htic_yn=="Oui",na.rm=TRUE); tot=nrow(df_f())
+    value_box_custom("HTIC", sprintf("%s (%s)",n_fmt(n),pct(n,tot)), color = "#E63946")
+  })
+  output$vb_rea_neurochir<- renderUI({
+    n=sum(df_f()$neurochir=="Oui",na.rm=TRUE); tot=nrow(df_f())
+    value_box_custom("Neurochirurgie", sprintf("%s (%s)",n_fmt(n),pct(n,tot)), color = "#9B5DE5")
+  })
+  output$vb_rea_vm       <- renderUI({
+    med=median(df_f()$duree_ventil,na.rm=TRUE)
+    value_box_custom("Durée VM médiane", if(!is.na(med)) sprintf("%.0f j",med) else "—", color = "#457B9D")
+  })
+  output$vb_rea_deces    <- renderUI({
+    n=sum(df_f()$deces_rea_f=="Oui",na.rm=TRUE); tot=nrow(df_f())
+    value_box_custom("Décès en réa", sprintf("%s (%s)",n_fmt(n),pct(n,tot)), color = "#1D3557")
+  })
+  output$vb_rea_lata     <- renderUI({
+    n=sum(df_f()$lata=="Oui",na.rm=TRUE); tot=nrow(df_f())
+    value_box_custom("LATA", sprintf("%s (%s)",n_fmt(n),pct(n,tot)), "#F4A261")
+  })
+  output$vb_rea_ata      <- renderUI({
+    n=sum(df_f()$ata=="Oui",na.rm=TRUE); tot=nrow(df_f())
+    value_box_custom("ATA", sprintf("%s (%s)",n_fmt(n),pct(n,tot)), "#E9C46A")
+  })
+  output$vb_rea_edme     <- renderUI({
+    n=sum(df_f()$edme=="Oui",na.rm=TRUE); tot=nrow(df_f())
+    value_box_custom("EME", sprintf("%s (%s)",n_fmt(n),pct(n,tot)), "#6c757d")
+  })
+  output$vb_rea_deces2   <- renderUI({
+    n=sum(df_f()$deces_rea_f=="Oui",na.rm=TRUE); tot=nrow(df_f())
+    value_box_custom("Décès en réa", sprintf("%s (%s)",n_fmt(n),pct(n,tot)), "#E63946")
   })
 
   # ── Vue globale ─────────────────────────────────────────
@@ -803,68 +998,239 @@ output$plot_inclusion_cum <- renderPlotly({
     p
   })
 
-  # ── Tables ──────────────────────────────────────────────
-  cols_table <- c("record_id", "centre", "diagnostic", "date_admission",
-                  "age", "sexe", "imc", "gcs_initial",
-                  "deces_total", "duree_sejour", "pronostic", "mrs_distance")
-
-  dt_options <- list(
-    pageLength = 15,
-    language = list(url = "//cdn.datatables.net/plug-ins/1.13.6/i18n/fr-FR.json"),
-    scrollX = TRUE,
-    dom = "Bfrtip",
-    buttons = c("copy", "csv", "excel")
-  )
-
-  output$table_principale <- renderDT({
-    df_f() %>%
-      select(any_of(cols_table)) %>%
-      mutate(date_admission = as.character(date_admission)) %>%
-      datatable(extensions = "Buttons",
-                options = dt_options,
-                rownames = FALSE,
-                filter = "top",
-                class = "table-hover table-striped")
+  # ═══════ RÉANIMATION ══════════════════════════════════
+  
+  # HTIC & PIC
+  output$plot_rea_capteur <- renderPlotly({
+    prop_bar_plot(df_f(),"capteur_pic","% avec capteur PIC","diagnostic")
   })
-
-  output$table_patho <- renderDT({
-    req(input$select_diag_table)
-    df_f() %>%
-      filter(diagnostic == input$select_diag_table) %>%
-      select(any_of(cols_table)) %>%
-      mutate(date_admission = as.character(date_admission)) %>%
-      datatable(extensions = "Buttons",
-                options = dt_options,
-                rownames = FALSE,
-                filter = "top",
-                class = "table-hover table-striped")
+  output$plot_rea_htic <- renderPlotly({
+    prop_bar_plot(df_f(),"htic_yn","% avec HTIC","diagnostic")
   })
-
-  output$table_centre <- renderDT({
-    req(input$select_centre_table)
-    df_f() %>%
-      filter(centre == input$select_centre_table) %>%
-      select(any_of(cols_table)) %>%
-      mutate(date_admission = as.character(date_admission)) %>%
-      datatable(extensions = "Buttons",
-                options = dt_options,
-                rownames = FALSE,
-                filter = "top",
-                class = "table-hover table-striped")
+  output$plot_rea_pic_max <- renderPlotly({
+    d <- df_f()%>%filter(!is.na(pic_max),!is.na(diagnostic))
+    if(nrow(d)==0) return(plotly_empty())
+    p <- ggplot(d,aes(x=reorder(diagnostic,pic_max,median,na.rm=TRUE),
+                      y=pic_max,fill=diagnostic,
+                      text=paste0(diagnostic,"<br>PIC max=",pic_max," mmHg")))+
+      geom_boxplot(alpha=0.8,outlier.shape=21)+
+      scale_fill_manual(values=pal_patho,drop=FALSE)+
+      labs(x=NULL,y="PIC maximale (mmHg)")+theme_dashboard()+
+      scale_y_continuous(limits = c(0,100)) +
+      theme(axis.text.x=element_text(angle=30,hjust=1),legend.position="none")
+    ggplotly(p,tooltip="text")%>%layout(paper_bgcolor="#f8f9fa",plot_bgcolor="#f8f9fa")
   })
-
-output$table_tbi <- renderDT({
-  req(input$select_centre_table)
-  df_f() %>%
-    filter(diagnostic == "TC") %>%
-    select(any_of(cols_table)) %>%
-    mutate(date_admission = as.character(date_admission)) %>%
-    datatable(extensions = "Buttons",
-              options = dt_options,
-              rownames = FALSE,
-              filter = "top",
-              class = "table-hover table-striped")
+  output$plot_rea_htic_ttt <- renderPlotly({
+    d <- df_f()%>%filter(htic_yn=="Oui")
+    ttt_n <- c("Sédation","Curarisation","Normothermie active","Hypothermie thérap.",
+               "DVE","Craniectomie décomp.","Suppression métabol.","Osmothérapie",
+               "Hypocapnie permissive","DVL externe")
+    ttt_v <- c("htic_ttt_sedation","htic_ttt_curare","htic_ttt_normotherm",
+               "htic_ttt_hypotherm","htic_ttt_dve","htic_ttt_craniect",
+               "htic_ttt_burst","htic_ttt_osmo","htic_ttt_hypocapnie","htic_ttt_lombaire")
+    counts <- sapply(ttt_v, function(v) sum(d[[v]]==1,na.rm=TRUE))
+    df_t <- data.frame(ttt=factor(ttt_n,levels=rev(ttt_n)),n=counts)
+    p <- ggplot(df_t,aes(x=ttt,y=n,text=paste0(ttt,"<br>N=",n)))+
+      geom_col(fill="#E63946",width=0.65)+coord_flip()+
+      labs(x=NULL,y="N patients (HTIC+)")+theme_dashboard()
+    ggplotly(p,tooltip="text")%>%layout(paper_bgcolor="#f8f9fa",plot_bgcolor="#f8f9fa")
+  })
+  
+  # Neurochirurgie
+  output$plot_rea_neurochir_yn <- renderPlotly({
+    prop_bar_plot(df_f(),"neurochir","% avec neurochirurgie","diagnostic")
+  })
+  output$plot_rea_neurochir_types <- renderPlotly({
+    d <- df_f()%>%filter(neurochir=="Oui")
+    nms <- c("Évacuation d'hématome","DVE","Clipping anévrysmal",
+             "Craniectomie hémisp.","Craniectomie F.Post.","DVP/DVA","Autre")
+    vrs <- c("nc_evacuation","nc_dve","nc_clipping","nc_craniect_hemi",
+             "nc_craniect_fp","nc_dvp","nc_autre")
+    cnt <- sapply(vrs,function(v) sum(d[[v]]==1,na.rm=TRUE))
+    df_n <- data.frame(g=factor(nms,levels=rev(nms)),n=cnt)
+    p <- ggplot(df_n,aes(x=g,y=n,text=paste0(g,"<br>N=",n)))+
+      geom_col(fill="#9B5DE5",width=0.65)+coord_flip()+
+      labs(x=NULL,y="N patients")+theme_dashboard()
+    ggplotly(p,tooltip="text")%>%layout(paper_bgcolor="#f8f9fa",plot_bgcolor="#f8f9fa")
+  })
+  output$plot_rea_neurochir_centre <- renderPlotly({
+    pal_c <- setNames(
+      colorRampPalette(c("#457B9D","#1D3557"))(length(centres_dispo)),
+      centres_dispo
+    )
+    prop_bar_plot(df_f(),"neurochir","% avec neurochirurgie","centre",pal_c)
+  })
+  output$info_neurochir <- renderUI({
+    d <- df_f(); n_nc <- sum(d$neurochir=="Oui",na.rm=TRUE); tot <- nrow(d)
+    tagList(
+      h5("Résumé", style="color:#1D3557;font-weight:700;margin-top:10px;"),
+      tags$ul(
+        tags$li(sprintf("Opérés : %d / %d (%.1f%%)", n_nc, tot, 100*n_nc/max(tot,1))),
+        tags$li(sprintf("Médiane gestes/patient : %.1f",
+                        median(na.omit(as.numeric(d$neurochirurgie_nombre))))),
+        tags$li(sprintf("DVE : %d cas", sum(d$nc_dve==1,na.rm=TRUE))),
+        tags$li(sprintf("Craniectomie : %d cas",
+                        sum(d$nc_craniect_hemi==1|d$nc_craniect_fp==1,na.rm=TRUE)))
+      )
+    )
+  })
+  
+  # Sédation & VM
+  output$plot_rea_sed_yn <- renderPlotly({
+    prop_bar_plot(df_f(),"sedation","% avec sédation","diagnostic")
+  })
+  output$plot_rea_sed_types <- renderPlotly({
+    d <- df_f()%>%filter(sedation=="Oui")
+    mols <- c("Midazolam","Kétamine","Propofol","Dexmédétomidine","Clonidine")
+    vars <- c("sed_midazolam","sed_ketamine","sed_propofol","sed_dexmede","sed_clonidine")
+    cnt  <- sapply(vars,function(v) sum(d[[v]]==1,na.rm=TRUE))
+    df_m <- data.frame(m=factor(mols,levels=rev(mols)),n=cnt)
+    p <- ggplot(df_m,aes(x=m,y=n,text=paste0(m,"<br>N=",n)))+
+      geom_col(fill="#457B9D",width=0.65)+coord_flip()+
+      labs(x=NULL,y="N patients")+theme_dashboard()
+    ggplotly(p,tooltip="text")%>%layout(paper_bgcolor="#f8f9fa",plot_bgcolor="#f8f9fa")
+  })
+  output$plot_rea_sed_duree <- renderPlotly({
+    d <- df_f()%>%filter(!is.na(duree_sedation),!is.na(diagnostic),sedation=="Oui")
+    if(nrow(d)==0) return(plotly_empty())
+    p <- ggplot(d,aes(x=reorder(diagnostic,duree_sedation,median,na.rm=TRUE),
+                      y=duree_sedation,fill=diagnostic,
+                      text=paste0(diagnostic,"<br>",duree_sedation," j")))+
+      geom_boxplot(alpha=0.8,outlier.shape=21)+
+      scale_fill_manual(values=pal_patho,drop=FALSE)+
+      labs(x=NULL,y="Durée sédation (j)")+theme_dashboard()+
+      scale_y_continuous(limits = c(0,50)) +
+      theme(axis.text.x=element_text(angle=30,hjust=1),legend.position="none")
+    ggplotly(p,tooltip="text")%>%layout(paper_bgcolor="#f8f9fa",plot_bgcolor="#f8f9fa")
+  })
+  output$plot_rea_vm_duree <- renderPlotly({
+    d <- df_f()%>%filter(!is.na(duree_ventil),!is.na(diagnostic),ventilation=="Oui")
+    if(nrow(d)==0) return(plotly_empty())
+    p <- ggplot(d,aes(x=reorder(diagnostic,duree_ventil,median,na.rm=TRUE),
+                      y=duree_ventil,fill=diagnostic,
+                      text=paste0(diagnostic,"<br>",duree_ventil," j")))+
+      geom_boxplot(alpha=0.8,outlier.shape=21)+
+      scale_fill_manual(values=pal_patho,drop=FALSE)+
+      labs(x=NULL,y="Durée ventilation (j)")+theme_dashboard()+
+      scale_y_continuous(limits = c(0,50)) +
+      theme(axis.text.x=element_text(angle=30,hjust=1),legend.position="none")
+    ggplotly(p,tooltip="text")%>%layout(paper_bgcolor="#f8f9fa",plot_bgcolor="#f8f9fa")
+  })
+  
+  # LATA / ATA / EME / Décès
+  output$plot_rea_lata       <- renderPlotly(prop_bar_plot(df_f(),"lata",       "% LATA","diagnostic"))
+  output$plot_rea_ata        <- renderPlotly(prop_bar_plot(df_f(),"ata",        "% ATA", "diagnostic"))
+  output$plot_rea_edme       <- renderPlotly(prop_bar_plot(df_f(),"edme",       "% EME", "diagnostic"))
+  output$plot_rea_deces_patho<- renderPlotly(prop_bar_plot(df_f(),"deces_rea_f","% Décès en réa","diagnostic"))
+  
+  # ═══════ DONNÉES MANQUANTES ═══════════════════════════
+  
+  missing_data <- reactive({
+    d     <- df_f()
+    strat <- input$missing_stratif
+    all_v <- unlist(vars_missing)
+    
+    get_cat <- function(v) {
+      names(vars_missing)[sapply(vars_missing, function(x) v %in% x)]
+    }
+    
+    if (strat == "global") {
+      bind_rows(lapply(all_v, function(v) {
+        n_tot <- nrow(d)
+        n_na  <- if(v %in% names(d)) sum(is.na(d[[v]])) else NA_integer_
+        data.frame(
+          categorie    = get_cat(v),
+          variable     = v,
+          label        = ifelse(!is.na(labels_missing[v]) && labels_missing[v]!="NA",
+                                labels_missing[v], v),
+          groupe       = "Global",
+          n_total      = n_tot,
+          n_manquant   = n_na,
+          pct_manquant = if(!is.na(n_na)&&n_tot>0) round(100*n_na/n_tot,1) else NA_real_,
+          stringsAsFactors = FALSE
+        )
+      }))
+    } else {
+      groupes <- sort(unique(na.omit(d[[strat]])))
+      bind_rows(lapply(all_v, function(v) {
+        bind_rows(lapply(groupes, function(g) {
+          dg    <- d[d[[strat]]==g & !is.na(d[[strat]]),]
+          n_tot <- nrow(dg)
+          n_na  <- if(v %in% names(dg)) sum(is.na(dg[[v]])) else NA_integer_
+          data.frame(
+            categorie    = get_cat(v),
+            variable     = v,
+            label        = ifelse(!is.na(labels_missing[v]) && labels_missing[v]!="NA",
+                                  labels_missing[v], v),
+            groupe       = g,
+            n_total      = n_tot,
+            n_manquant   = n_na,
+            pct_manquant = if(!is.na(n_na)&&n_tot>0) round(100*n_na/n_tot,1) else NA_real_,
+            stringsAsFactors = FALSE
+          )
+        }))
+      }))
+    }
+  })
+  
+  output$plot_missing_heatmap <- renderPlotly({
+    d <- missing_data()
+    if(nrow(d)==0) return(plotly_empty())
+    p <- ggplot(d, aes(
+      x    = groupe,
+      y    = reorder(label, pct_manquant, mean, na.rm=TRUE),
+      fill = pct_manquant,
+      text = paste0(label,"\n",groupe,
+                    "\nManquant : ",n_manquant,"/",n_total,
+                    " (",pct_manquant,"%)")
+    )) +
+      geom_tile(color="white", linewidth=0.4) +
+      geom_text(aes(label=ifelse(is.na(pct_manquant),"—",paste0(pct_manquant,"%"))),
+                size=3.2, color="white", fontface="bold") +
+      scale_fill_gradientn(
+        colours  = c("#2A9D8F","#E9C46A","#E63946"),
+        values   = rescale(c(0,30,100)),
+        na.value = "#adb5bd",
+        limits   = c(0,100),
+        name     = "% manquant"
+      ) +
+      facet_grid(categorie ~ ., scales="free_y", space="free_y") +
+      labs(x=NULL, y=NULL) + theme_dashboard() +
+      theme(
+        axis.text.x  = element_text(angle=35,hjust=1,size=10),
+        axis.text.y  = element_text(size=10),
+        strip.text.y = element_text(angle=0,hjust=0,face="bold",size=10),
+        panel.spacing= unit(0.3,"lines"),
+        legend.position = "right"
+      )
+    ggplotly(p,tooltip="text") %>%
+      layout(paper_bgcolor="#f8f9fa", plot_bgcolor="#f8f9fa",
+             margin=list(l=220,r=80,t=20,b=100))
+  })
+  
+  output$table_missing <- renderDT({
+    d <- missing_data() %>%
+      select(Catégorie=categorie, Variable=label, Groupe=groupe,
+             `N total`=n_total, `N manquant`=n_manquant,
+             `% manquant`=pct_manquant) %>%
+      arrange(Catégorie, Variable, Groupe)
+    datatable(d, rownames=FALSE, filter="top",
+              extensions="Buttons",
+              options=list(
+                pageLength=20, scrollX=TRUE,
+                language=list(url="//cdn.datatables.net/plug-ins/1.13.6/i18n/fr-FR.json"),
+                dom="Bfrtip", buttons=c("copy","csv","excel")
+              ),
+              class="table-hover table-striped table-sm"
+    ) %>%
+      formatStyle(
+        "% manquant",
+        background = styleInterval(c(10,30,60),
+                                   c("#d4edda","#fff3cd","#ffd7a0","#f8d7da")),
+        fontWeight = "bold"
+      )
   })
 }
+
 # ---- Lancement ---------------------------------------------
 shinyApp(ui, server)
