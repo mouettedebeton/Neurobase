@@ -15,7 +15,6 @@ library(ggsci)
 library(forcats)
 library(ggupset)
 library(survival)
-library(readr)
 
 # ---- Chargement & préparation des données ------------------
 df_raw <- read_rds("data.rds") |>
@@ -26,11 +25,13 @@ df_raw <- read_rds("data.rds") |>
          hsa_fisher_modifiee, aic_nihss, tcdb_scan_classe, gcs_total_pire_24_heures, htic.factor, htic_pic_max, capteur_pic.factor, neurochirurgie.factor,
          sedation_rea.factor, sedation_rea_duree, ventilation_rea.factor, ventilation_rea_duree, ata.factor, deces_rea.factor, trachetomie.factor,
          infection_rea.factor, hsa_anevrysme_traitement_type.factor, hsa_vasospasme.factor, hsa_vasospasme_traitement,
-         eval_distance, starts_with(c("htic_traitement___", "sedation_rea_type___", "neurochirurgie_type___", "hsa_vasospasme_dg_type____", "hsa_vasospasme_traitement_type___")),
+         hsa_anevrysme_localisation, hsa_anevrysme_complication,
+         eval_distance, starts_with(c("htic_traitement___", "sedation_rea_type___", "neurochirurgie_type___", "hsa_vasospasme_dg_type____", "hsa_vasospasme_traitement_type___", "hsa_anevrysme_compli_type___")),
          aic_thrombolyse, aic_thrombectomie,
          neurochirurgie_date, neurochirurgie_nombre,
          infection_rea_precoce, infection_rea_precoce_inh, infection_rea_tardive,
-         evaluation_distance_date, pmo)
+         evaluation_distance_date, pmo,
+         hip_taille_ml, hip_taille_30ml, sortie_rea.factor)
 
 # Conversion des dates clés
 df_raw$date_admission  <- as.Date(df_raw$date_admission)
@@ -85,8 +86,19 @@ df <- df_raw |>
     # Scores spécifiques
     hsa_wfns      = as.numeric(hsa_wfns),
     hsa_fisher    = as.numeric(hsa_fisher_modifiee),
+    # Localisation de l'anévrysme regroupée (terminaison carotidienne classée antérieure)
+    hsa_loc       = case_when(
+      as.character(hsa_anevrysme_localisation) %in% c("1","2","3","4","8") ~ "Antérieure",
+      as.character(hsa_anevrysme_localisation) %in% c("5","6","7")         ~ "Postérieure",
+      TRUE ~ NA_character_),
     nihss         = as.numeric(aic_nihss),
     gcs_pire24    = as.numeric(gcs_total_pire_24_heures),
+    # AVCh : volume de l'hématome et seuil 30 mL
+    hip_vol       = as.numeric(hip_taille_ml),
+    hip_30        = case_when(
+      as.character(hip_taille_30ml) %in% c("Oui","1") ~ "\u2265 30 mL",
+      as.character(hip_taille_30ml) %in% c("Non","0") ~ "< 30 mL",
+      TRUE ~ NA_character_),
     # --- Réanimation ---
     htic_yn       = as.character(htic.factor),
     pic_max       = as.numeric(htic_pic_max),
@@ -215,6 +227,9 @@ pal_centre_auto <- setNames(
 # Palette ordinale du score de Rankin (mRS 0 = meilleur -> 6 = décès)
 pal_mrs <- c("0"="#1A9850","1"="#66BD63","2"="#A6D96A","3"="#FEE08B",
              "4"="#FDAE61","5"="#F46D43","6"="#A50026")
+
+# Palette localisation de l'anévrysme (HSA)
+pal_loc <- c("Antérieure" = "#457B9D", "Postérieure" = "#E63946")
 
 # ---- Thème ggplot ------------------------------------------
 theme_dashboard <- function() {
@@ -553,11 +568,11 @@ ui <- page_navbar(
                                    uiOutput("vb_hsa_clip_coil"), uiOutput("vb_hsa_deces")
                     )
                 ),
-                # Scores de gravité
+                # Scores de gravité (stratifiés par localisation de l'anévrysme)
                 layout_columns(col_widths = c(6, 6),
-                               card(card_header("Score WFNS à l'admission"),
+                               card(card_header("Score WFNS à l'admission (par localisation)"),
                                     plotlyOutput("plot_hsa_wfns", height = "280px")),
-                               card(card_header("Score de Fisher modifié"),
+                               card(card_header("Score de Fisher modifié (par localisation)"),
                                     plotlyOutput("plot_hsa_fisher", height = "280px"))
                 ),
                 # Prise en charge
@@ -567,16 +582,16 @@ ui <- page_navbar(
                                card(card_header("Vasospasme : prévalence et type de diagnostic"),
                                     plotlyOutput("plot_hsa_vasospasme_dg", height = "280px"))
                 ),
-                # Vasospasme traitement + délai
+                # Complications du traitement endovasculaire + délai
                 layout_columns(col_widths = c(6, 6),
-                               card(card_header("Traitement du vasospasme"),
-                                    plotlyOutput("plot_hsa_vasospasme_ttt", height = "280px")),
+                               card(card_header("Complications du traitement endovasculaire — par centre"),
+                                    plotlyOutput("plot_hsa_compli", height = "280px")),
                                card(card_header("Délai symptômes → admission (heures)"),
                                     plotlyOutput("plot_hsa_delai", height = "280px"))
                 ),
                 # Devenir
                 layout_columns(col_widths = c(12),
-                               card(card_header("Pronostic (mRS dichotomisé) selon grade WFNS"),
+                               card(card_header("mRS à distance (ordinal) selon le grade WFNS"),
                                     plotlyOutput("plot_hsa_pronostic_wfns", height = "300px"))
                 )
       ),
@@ -602,7 +617,7 @@ ui <- page_navbar(
                                     plotlyOutput("plot_avci_delai", height = "280px"))
                 ),
                 layout_columns(col_widths = c(12),
-                               card(card_header("Pronostic (mRS dichotomisé) selon NIHSS et traitement de reperfusion"),
+                               card(card_header("mRS à distance (ordinal) selon la reperfusion"),
                                     plotlyOutput("plot_avci_pronostic", height = "320px"))
                 )
       ),
@@ -618,11 +633,11 @@ ui <- page_navbar(
                 layout_columns(col_widths = c(6, 6),
                                card(card_header("GCS à l'admission"),
                                     plotlyOutput("plot_avch_gcs", height = "280px")),
-                               card(card_header("Classification de Marshall / TCDB"),
-                                    plotlyOutput("plot_avch_tcdb", height = "280px"))
+                               card(card_header("Volume de l'hématome (mL) selon le seuil de 30 mL"),
+                                    plotlyOutput("plot_avch_volume", height = "280px"))
                 ),
                 layout_columns(col_widths = c(6, 6),
-                               card(card_header("HTIC et mesure de la PIC"),
+                               card(card_header("Capteur de PIC & HTIC (effectifs)"),
                                     plotlyOutput("plot_avch_htic", height = "280px")),
                                card(card_header("Neurochirurgie — types de gestes"),
                                     plotlyOutput("plot_avch_neurochir", height = "280px"))
@@ -630,7 +645,7 @@ ui <- page_navbar(
                 layout_columns(col_widths = c(6, 6),
                                card(card_header("Délai symptômes → admission (heures)"),
                                     plotlyOutput("plot_avch_delai", height = "280px")),
-                               card(card_header("Pronostic (mRS dichotomisé)"),
+                               card(card_header("mRS à distance (ordinal)"),
                                     plotlyOutput("plot_avch_pronostic", height = "280px"))
                 )
       )
@@ -649,37 +664,35 @@ ui <- page_navbar(
           uiOutput("vb_edme"),
           uiOutput("vb_lata")
         )),
-    layout_columns(
-      col_widths = c(6, 6),
-      card(
-        card_header("mRs dichotomisé (< 3 ou > 2) par pathologie"),
-        plotlyOutput("plot_pronostic", height = "340px")
+    navset_tab(
+      
+      nav_panel("Mortalité", br(),
+                layout_columns(col_widths = c(6, 6),
+                               card(card_header("Survie après l'admission (Kaplan-Meier) — par pathologie"),
+                                    plotlyOutput("plot_km_patho", height = "520px")),
+                               card(card_header("Survie après l'admission (Kaplan-Meier) — par centre"),
+                                    plotlyOutput("plot_km_centre", height = "520px"))
+                )
       ),
-      card(
-        card_header("mRS détaillé par pathologie"),
-        plotlyOutput("plot_mrs", height = "320px")
+      
+      nav_panel("Devenir", br(),
+                layout_columns(col_widths = c(6, 6),
+                               card(card_header("mRS dichotomisé (< 3 ou ≥ 3) par pathologie"),
+                                    plotlyOutput("plot_pronostic", height = "360px")),
+                               card(card_header("mRS détaillé par pathologie"),
+                                    plotlyOutput("plot_mrs", height = "360px"))
+                )
       ),
-    ),
-    layout_columns(
-      col_widths = c(6, 6),
-      card(
-        card_header("GCS à l'admission par pathologie"),
-        plotlyOutput("plot_gcs", height = "320px")
-      ),
-      card(
-        card_header("Durée de séjour en réanimation (jours)"),
-        plotlyOutput("plot_duree_sejour", height = "340px")
-      )
-    ),
-    layout_columns(
-      col_widths = c(6, 6),
-      card(
-        card_header("Survie après l'admission (Kaplan-Meier) — par pathologie"),
-        plotlyOutput("plot_km_patho", height = "520px")
-      ),
-      card(
-        card_header("Survie après l'admission (Kaplan-Meier) — par centre"),
-        plotlyOutput("plot_km_centre", height = "520px")
+      
+      nav_panel("Sortie de réa", br(),
+                layout_columns(col_widths = 12,
+                               card(card_header("Durée de séjour en réanimation (jours)"),
+                                    plotlyOutput("plot_duree_sejour", height = "320px"))
+                ),
+                layout_columns(col_widths = 12,
+                               card(card_header("Parcours des patients : pire GCS H24 → diagnostic → sortie de réa → mRS"),
+                                    plotlyOutput("plot_sankey", height = "540px"))
+                )
       )
     )
   ),
@@ -1060,24 +1073,6 @@ server <- function(input, output, session) {
       layout(paper_bgcolor = "#f8f9fa", plot_bgcolor = "#f8f9fa")
   })
   
-  output$plot_gcs <- renderPlotly({
-    d <- df_f() |>
-      filter(!is.na(gcs_initial), !is.na(diagnostic)) |>
-      count(diagnostic, gcs_initial) |>
-      group_by(diagnostic) |>
-      mutate(pct = n /sum(n))
-    p <- ggplot(d, aes(x = gcs_initial, y = pct, fill = diagnostic,
-                       text = paste0(diagnostic, "<br>GCS initial ", gcs_initial,
-                                     "<br>", round(100*pct,1), "% (N=", n, ")"))) +
-      geom_col(position = "dodge", width = 0.75) +
-      scale_fill_manual(values = pal_patho, drop = FALSE) +
-      scale_x_continuous(breaks = 3:15) +
-      labs(x = "Score GCS", y = "Proportion", fill = NULL) +
-      theme_dashboard()
-    ggplotly(p, tooltip = "text") |>
-      layout(paper_bgcolor = "#f8f9fa", plot_bgcolor = "#f8f9fa")
-  })
-  
   # ═══════ PAR PATHOLOGIE ═══════════════════════════════
   
   # ── TC ──────────────────────────────────────────────────
@@ -1200,12 +1195,14 @@ server <- function(input, output, session) {
     if (nrow(d) == 0 || all(lengths(d$tx_set) == 0))
       return(ggplot() + annotate("text", x=0.5, y=0.5, label="Aucune donnée HTIC TC",
                                  size=5, color="#6c757d") + theme_void())
-    ggplot(d, aes(x = tx_set)) +
-      geom_bar(fill = "#E63946", width = 0.7) +
+    ggplot(d, aes(x = tx_set, fill = centre)) +
+      geom_bar(width = 0.7) +
       scale_x_upset(n_intersections = 12, n_sets = 10) +
+      scale_fill_manual(values = pal_centre_auto, name = "Centre") +
       labs(x = NULL, y = "Nombre de patients") +
       theme_dashboard() +
-      theme(axis.text.x = element_text(size = 8))
+      theme(axis.text.x = element_text(size = 8),
+            legend.position = "right")
   }, res = 96)
   
   output$plot_tbi_mrs <- renderPlotly({
@@ -1254,25 +1251,35 @@ server <- function(input, output, session) {
   })
   
   output$plot_hsa_wfns <- renderPlotly({
-    d <- df_hsa() |> filter(!is.na(hsa_wfns)) |>
-      count(wfns = factor(hsa_wfns, levels = 1:5))
-    p <- plot_ly(d, x = ~wfns, y = ~n, type = "bar",
-                 marker = list(color = "#F4A261"),
-                 hovertemplate = "WFNS grade %{x}<br>N = %{y}<extra></extra>") |>
-      layout(xaxis = list(title = "Grade WFNS"), yaxis = list(title = "N"),
-             paper_bgcolor = "#f8f9fa", plot_bgcolor = "#f8f9fa")
-    p
+    d <- df_hsa() |>
+      filter(!is.na(hsa_wfns), !is.na(hsa_loc)) |>
+      count(wfns = factor(hsa_wfns, levels = 1:5), loc = hsa_loc)
+    if (nrow(d) == 0) return(plotly_empty())
+    p <- ggplot(d, aes(x = wfns, y = n, fill = loc,
+                       text = paste0("WFNS ", wfns, " \u2014 ", loc, "<br>N = ", n))) +
+      geom_col(position = "dodge", width = 0.7) +
+      scale_x_discrete(drop = FALSE) +
+      scale_fill_manual(values = pal_loc, drop = FALSE, name = NULL) +
+      labs(x = "Grade WFNS", y = "Nombre de patients") +
+      theme_dashboard()
+    ggplotly(p, tooltip = "text") |>
+      layout(paper_bgcolor = "#f8f9fa", plot_bgcolor = "#f8f9fa")
   })
   
   output$plot_hsa_fisher <- renderPlotly({
-    d <- df_hsa() |> filter(!is.na(hsa_fisher)) |>
-      count(fisher = factor(hsa_fisher, levels = 0:4))
-    p <- plot_ly(d, x = ~fisher, y = ~n, type = "bar",
-                 marker = list(color = "#E9C46A"),
-                 hovertemplate = "Fisher modifié %{x}<br>N = %{y}<extra></extra>") |>
-      layout(xaxis = list(title = "Score Fisher modifié"), yaxis = list(title = "N"),
-             paper_bgcolor = "#f8f9fa", plot_bgcolor = "#f8f9fa")
-    p
+    d <- df_hsa() |>
+      filter(!is.na(hsa_fisher), !is.na(hsa_loc)) |>
+      count(fisher = factor(hsa_fisher, levels = 0:4), loc = hsa_loc)
+    if (nrow(d) == 0) return(plotly_empty())
+    p <- ggplot(d, aes(x = fisher, y = n, fill = loc,
+                       text = paste0("Fisher ", fisher, " \u2014 ", loc, "<br>N = ", n))) +
+      geom_col(position = "dodge", width = 0.7) +
+      scale_x_discrete(drop = FALSE) +
+      scale_fill_manual(values = pal_loc, drop = FALSE, name = NULL) +
+      labs(x = "Score de Fisher modifié", y = "Nombre de patients") +
+      theme_dashboard()
+    ggplotly(p, tooltip = "text") |>
+      layout(paper_bgcolor = "#f8f9fa", plot_bgcolor = "#f8f9fa")
   })
   
   # Traitement anévrysme (gardé depuis l'ancien plot_hsa_ttt_anev mais référencé dans le nouvel UI)
@@ -1334,26 +1341,64 @@ server <- function(input, output, session) {
     p
   })
   
-  output$plot_hsa_vasospasme_ttt <- renderPlotly({
-    d <- df_hsa() |>
-      filter(!is.na(hsa_vasospasme.factor))
-    p <- ggplot(d, aes(x = hsa_vasospasme_traitement, fill = hsa_vasospasme_traitement,
-                       text = paste0(..count..))) +
-      geom_bar() +
-      labs(x = "Type de traitement du vasospasme", y = "Nombre") +
-      guides(fill = "none") +
-      theme_dashboard()
+  output$plot_hsa_compli <- renderPlotly({
+    d_rx <- df_hsa() |>
+      filter(!is.na(centre)) |>
+      mutate(endovasc = grepl("coil|embol|radio|endovas|interv",
+                              as.character(hsa_anevrysme_traitement_type.factor),
+                              ignore.case = TRUE)) |>
+      filter(endovasc)
+    if (nrow(d_rx) == 0) return(plotly_empty())
+    # Types de complication (cases à cocher, choix multiples)
+    compli_labels <- c(
+      hsa_anevrysme_compli_type___1 = "Débord de coil",
+      hsa_anevrysme_compli_type___2 = "Occlusion vasculaire",
+      hsa_anevrysme_compli_type___3 = "Dissection",
+      hsa_anevrysme_compli_type___4 = "Rupture",
+      hsa_anevrysme_compli_type___5 = "Resaignement"
+    )
+    vars <- intersect(names(compli_labels), names(d_rx))
+    if (length(vars) == 0) return(plotly_empty())
+    den <- d_rx |> count(centre, name = "den")
+    dd <- bind_rows(lapply(vars, function(v) {
+      d_rx |>
+        group_by(centre) |>
+        summarise(n = sum(.data[[v]] == 1, na.rm = TRUE), .groups = "drop") |>
+        mutate(type = unname(compli_labels[v]))
+    })) |>
+      left_join(den, by = "centre") |>
+      mutate(pct  = ifelse(den > 0, n / den, NA_real_),
+             type = factor(type, levels = unname(compli_labels)))
+    if (nrow(dd) == 0) return(plotly_empty())
+    p <- ggplot(dd, aes(x = centre, y = pct, fill = type,
+                        text = paste0(centre, "<br>", type, "<br>",
+                                      n, "/", den, " trait. endovasc. (", round(100*pct,1), "%)"))) +
+      geom_col(position = "dodge", width = 0.8) +
+      scale_y_continuous(labels = percent_format(accuracy = 1)) +
+      scale_fill_manual(values = c("Débord de coil"       = "#457B9D",
+                                   "Occlusion vasculaire" = "#2A9D8F",
+                                   "Dissection"           = "#E9C46A",
+                                   "Rupture"              = "#E63946",
+                                   "Resaignement"         = "#9B5DE5"),
+                        drop = FALSE, name = "Complication") +
+      labs(x = NULL, y = "Part des traitements endovasculaires") +
+      theme_dashboard() +
+      theme(axis.text.x = element_text(angle = 30, hjust = 1))
     ggplotly(p, tooltip = "text") |>
       layout(paper_bgcolor = "#f8f9fa", plot_bgcolor = "#f8f9fa")
   })
   
   output$plot_hsa_delai <- renderPlotly({
-    d <- df_hsa() |> filter(!is.na(delai_adm_h), delai_adm_h >= 0, delai_adm_h <= 720)
-    if (nrow(d) == 0) return(plotly_empty())
+    d_all <- df_hsa() |> filter(!is.na(delai_adm_h), delai_adm_h >= 0)
+    if (nrow(d_all) == 0) return(plotly_empty())
+    d      <- d_all |> filter(delai_adm_h <= 48)
+    n_tard <- sum(d_all$delai_adm_h > 48)
     p <- ggplot(d, aes(x = delai_adm_h,
                        text = paste0("Délai = ", round(delai_adm_h, 0), " h"))) +
-      geom_histogram(binwidth = 6, fill = "#F4A261", color = "white") +
-      labs(x = "Délai symptômes → admission (heures)", y = "Nombre de patients") +
+      geom_histogram(binwidth = 3, boundary = 0, fill = "#F4A261", color = "white") +
+      scale_x_continuous(breaks = seq(0, 48, 6), limits = c(-1.5, 49.5)) +
+      labs(x = "Délai symptômes → admission (heures)", y = "Nombre de patients",
+           subtitle = sprintf("Fenêtre 0-48 h | %d patient(s) admis au-delà de 48 h non affichés", n_tard)) +
       theme_dashboard()
     ggplotly(p, tooltip = "text") |>
       layout(paper_bgcolor = "#f8f9fa", plot_bgcolor = "#f8f9fa")
@@ -1361,20 +1406,24 @@ server <- function(input, output, session) {
   
   output$plot_hsa_pronostic_wfns <- renderPlotly({
     d <- df_hsa() |>
-      filter(!is.na(pronostic), !is.na(hsa_wfns)) |>
-      mutate(wfns_grp = factor(hsa_wfns, levels = 1:5,
-                               labels = paste("WFNS", 1:5))) |>
-      count(wfns_grp, pronostic) |>
+      filter(!is.na(mrs_distance), !is.na(hsa_wfns)) |>
+      mutate(wfns_grp = factor(hsa_wfns, levels = 1:5, labels = paste("WFNS", 1:5)),
+             mrs      = factor(mrs_distance, levels = as.character(0:6))) |>
+      filter(!is.na(wfns_grp), !is.na(mrs)) |>
+      count(wfns_grp, mrs) |>
       group_by(wfns_grp) |>
-      mutate(pct = n / sum(n))
+      mutate(pct = n / sum(n)) |>
+      ungroup()
     if (nrow(d) == 0) return(plotly_empty())
-    p <- ggplot(d, aes(x = wfns_grp, y = pct,
-                       fill = factor(pronostic, c("Bon pronostic","Mauvais pronostic","Décès")),
-                       text = paste0(pronostic, "<br>", round(100*pct,1), "% (N=", n, ")"))) +
-      geom_col(position = "fill", width = 0.65) +
-      scale_fill_manual(values = c("Bon pronostic"="#2A9D8F","Mauvais pronostic"="#F4A261","Décès"="#E63946")) +
+    # mRS ordinal (shift) par grade WFNS
+    p <- ggplot(d, aes(x = wfns_grp, y = pct, fill = mrs,
+                       text = paste0(wfns_grp, "<br>mRS ", mrs, "<br>",
+                                     round(100*pct,1), "% (N=", n, ")"))) +
+      geom_col(position = position_fill(reverse = TRUE), width = 0.75) +
+      scale_fill_manual(values = pal_mrs, drop = FALSE, name = "mRS") +
       scale_y_continuous(labels = percent_format()) +
-      labs(x = "Grade WFNS", y = "Proportion", fill = NULL) +
+      coord_flip() +
+      labs(x = NULL, y = "Proportion") +
       theme_dashboard()
     ggplotly(p, tooltip = "text") |>
       layout(paper_bgcolor = "#f8f9fa", plot_bgcolor = "#f8f9fa")
@@ -1436,18 +1485,25 @@ server <- function(input, output, session) {
   })
   
   output$plot_avc_ttt <- renderPlotly({
+    tot <- nrow(df_avc())
+    if (tot == 0) return(plotly_empty())
     d <- df_avc() |>
       summarise(
         Thrombolyse   = sum(aic_thrombolyse == 1, na.rm = TRUE),
         Thrombectomie = sum(aic_thrombectomie == 1, na.rm = TRUE)
       ) |>
-      pivot_longer(everything(), names_to = "traitement", values_to = "n")
-    p <- plot_ly(d, x = ~traitement, y = ~n, type = "bar",
-                 marker = list(color = c("#2A9D8F", "#457B9D")),
-                 hovertemplate = "%{x}<br>N = %{y}<extra></extra>") |>
-      layout(xaxis = list(title = NULL), yaxis = list(title = "N patients"),
-             paper_bgcolor = "#f8f9fa", plot_bgcolor = "#f8f9fa")
-    p
+      pivot_longer(everything(), names_to = "traitement", values_to = "n") |>
+      mutate(pct = n / tot)
+    p <- ggplot(d, aes(x = traitement, y = pct, fill = traitement,
+                       text = paste0(traitement, "<br>", n, "/", tot,
+                                     " (", round(100*pct,1), "%)"))) +
+      geom_col(width = 0.6) +
+      scale_fill_manual(values = c("Thrombolyse" = "#2A9D8F", "Thrombectomie" = "#457B9D")) +
+      scale_y_continuous(labels = percent_format(accuracy = 1)) +
+      labs(x = NULL, y = "% de l'ensemble des AVCi") +
+      theme_dashboard() + theme(legend.position = "none")
+    ggplotly(p, tooltip = "text") |>
+      layout(paper_bgcolor = "#f8f9fa", plot_bgcolor = "#f8f9fa")
   })
   
   output$plot_avci_delai <- renderPlotly({
@@ -1471,22 +1527,25 @@ server <- function(input, output, session) {
   
   output$plot_avci_pronostic <- renderPlotly({
     d <- df_avc() |>
-      filter(!is.na(pronostic)) |>
+      filter(!is.na(mrs_distance)) |>
       mutate(reperfusion = case_when(
         aic_thrombectomie == 1 | aic_thrombolyse == 1 ~ "Reperfusion",
-        TRUE ~ "Pas de reperfusion"
-      )) |>
-      count(reperfusion, pronostic) |>
+        TRUE ~ "Pas de reperfusion"),
+        mrs = factor(mrs_distance, levels = as.character(0:6))) |>
+      filter(!is.na(mrs)) |>
+      count(reperfusion, mrs) |>
       group_by(reperfusion) |>
-      mutate(pct = n / sum(n))
+      mutate(pct = n / sum(n)) |>
+      ungroup()
     if (nrow(d) == 0) return(plotly_empty())
-    p <- ggplot(d, aes(x = reperfusion, y = pct,
-                       fill = factor(pronostic, c("Bon pronostic","Mauvais pronostic","Décès")),
-                       text = paste0(pronostic, "<br>", round(100*pct,1), "% (N=", n, ")"))) +
-      geom_col(position = "fill", width = 0.55) +
-      scale_fill_manual(values = c("Bon pronostic"="#2A9D8F","Mauvais pronostic"="#F4A261","Décès"="#E63946")) +
+    p <- ggplot(d, aes(x = reperfusion, y = pct, fill = mrs,
+                       text = paste0(reperfusion, "<br>mRS ", mrs, "<br>",
+                                     round(100*pct,1), "% (N=", n, ")"))) +
+      geom_col(position = position_fill(reverse = TRUE), width = 0.7) +
+      scale_fill_manual(values = pal_mrs, drop = FALSE, name = "mRS") +
       scale_y_continuous(labels = percent_format()) +
-      labs(x = NULL, y = "Proportion", fill = NULL) +
+      coord_flip() +
+      labs(x = NULL, y = "Proportion") +
       theme_dashboard()
     ggplotly(p, tooltip = "text") |>
       layout(paper_bgcolor = "#f8f9fa", plot_bgcolor = "#f8f9fa")
@@ -1526,37 +1585,26 @@ server <- function(input, output, session) {
       layout(paper_bgcolor = "#f8f9fa", plot_bgcolor = "#f8f9fa")
   })
   
-  output$plot_avch_tcdb <- renderPlotly({
-    d <- df_avch() |>
-      mutate(tcdb = factor(tcdb_scan_classe)) |>
-      filter(!is.na(tcdb)) |>
-      count(tcdb)
-    if (nrow(d) == 0) return(plotly_empty())
-    p <- ggplot(d, aes(x = tcdb, y = n, fill = tcdb,
-                       text = paste0("Classe Marshall ", tcdb, "<br>N = ", n))) +
-      geom_col(width = 0.65) +
-      guides(fill = "none") +
-      scale_fill_nejm() +
-      labs(x = "Classe TCDB / Marshall", y = "Nombre de patients") +
-      theme_dashboard()
-    ggplotly(p, tooltip = "text") |>
-      layout(paper_bgcolor = "#f8f9fa", plot_bgcolor = "#f8f9fa")
-  })
-  
   output$plot_avch_htic <- renderPlotly({
-    d <- df_avch() |>
-      filter(!is.na(htic_yn)) |>
-      count(htic_yn) |>
-      mutate(pct = n / sum(n))
-    if (nrow(d) == 0) return(plotly_empty())
-    n_capteur <- sum(df_avch()$capteur_pic == "Oui", na.rm = TRUE)
-    p <- ggplot(d, aes(x = htic_yn, y = pct, fill = htic_yn,
-                       text = paste0(htic_yn, "<br>", round(100*pct,1), "% (N=", n, ")"))) +
-      geom_col(width = 0.55) +
-      scale_fill_manual(values = c("Oui" = "#e76f51", "Non" = "#2A9D8F")) +
-      scale_y_continuous(labels = percent_format()) +
-      labs(x = NULL, y = "Proportion",
-           subtitle = sprintf("Capteur PIC : %d patients", n_capteur)) +
+    d   <- df_avch()
+    tot <- nrow(d)
+    if (tot == 0) return(plotly_empty())
+    n_cap  <- sum(oui01(d$capteur_pic), na.rm = TRUE)
+    n_htic <- sum(oui01(d$htic_yn),     na.rm = TRUE)
+    # HTIC = sous-groupe des porteurs de capteur PIC -> dénominateur = n_cap
+    dd <- data.frame(
+      indicateur = factor(c("Capteur PIC","HTIC"), levels = c("Capteur PIC","HTIC")),
+      count = c(n_cap, n_htic),
+      den   = c(tot, n_cap),
+      base  = c("de l'effectif AVCh","des patients avec capteur PIC")
+    ) |>
+      mutate(pct = ifelse(den > 0, 100*count/den, NA_real_),
+             tip = paste0(indicateur, " : ", count, " patient(s)<br>",
+                          ifelse(is.na(pct), "n.d.", paste0(round(pct,1), "% ", base))))
+    p <- ggplot(dd, aes(x = indicateur, y = count, fill = indicateur, text = tip)) +
+      geom_col(width = 0.6) +
+      scale_fill_manual(values = c("Capteur PIC" = "#457B9D", "HTIC" = "#E63946")) +
+      labs(x = NULL, y = "Nombre de patients") +
       theme_dashboard() + theme(legend.position = "none")
     ggplotly(p, tooltip = "text") |>
       layout(paper_bgcolor = "#f8f9fa", plot_bgcolor = "#f8f9fa")
@@ -1577,12 +1625,16 @@ server <- function(input, output, session) {
   })
   
   output$plot_avch_delai <- renderPlotly({
-    d <- df_avch() |> filter(!is.na(delai_adm_h), delai_adm_h >= 0, delai_adm_h <= 720)
-    if (nrow(d) == 0) return(plotly_empty())
+    d_all <- df_avch() |> filter(!is.na(delai_adm_h), delai_adm_h >= 0)
+    if (nrow(d_all) == 0) return(plotly_empty())
+    d      <- d_all |> filter(delai_adm_h <= 48)
+    n_tard <- sum(d_all$delai_adm_h > 48)
     p <- ggplot(d, aes(x = delai_adm_h,
                        text = paste0("Délai = ", round(delai_adm_h,0), " h"))) +
-      geom_histogram(binwidth = 6, fill = "#E9C46A", color = "white") +
-      labs(x = "Délai symptômes → admission (heures)", y = "Nombre de patients") +
+      geom_histogram(binwidth = 3, boundary = 0, fill = "#E9C46A", color = "white") +
+      scale_x_continuous(breaks = seq(0, 48, 6), limits = c(-1.5, 49.5)) +
+      labs(x = "Délai symptômes → admission (heures)", y = "Nombre de patients",
+           subtitle = sprintf("Fenêtre 0-48 h | %d patient(s) admis au-delà de 48 h non affichés", n_tard)) +
       theme_dashboard()
     ggplotly(p, tooltip = "text") |>
       layout(paper_bgcolor = "#f8f9fa", plot_bgcolor = "#f8f9fa")
@@ -1590,18 +1642,35 @@ server <- function(input, output, session) {
   
   output$plot_avch_pronostic <- renderPlotly({
     d <- df_avch() |>
-      filter(!is.na(pronostic)) |>
-      count(pronostic) |>
-      mutate(pct = n / sum(n))
+      filter(!is.na(mrs_distance)) |>
+      mutate(mrs = factor(mrs_distance, levels = as.character(0:6))) |>
+      filter(!is.na(mrs)) |>
+      count(mrs) |>
+      mutate(pct = n / sum(n), grp = "AVCh")
     if (nrow(d) == 0) return(plotly_empty())
-    p <- ggplot(d, aes(x = reorder(pronostic, -pct), y = pct,
-                       fill = factor(pronostic, c("Bon pronostic","Mauvais pronostic","Décès")),
-                       text = paste0(pronostic, "<br>", round(100*pct,1), "% (N=", n, ")"))) +
-      geom_col(width = 0.55) +
-      scale_fill_manual(values = c("Bon pronostic"="#2A9D8F","Mauvais pronostic"="#F4A261","Décès"="#E63946")) +
-      scale_y_continuous(labels = percent_format()) +
-      labs(x = NULL, y = "Proportion", fill = NULL) +
-      theme_dashboard()
+    p <- ggplot(d, aes(x = grp, y = pct, fill = mrs,
+                       text = paste0("mRS ", mrs, "<br>", round(100*pct,1), "% (N=", n, ")"))) +
+      geom_col(position = position_fill(reverse = TRUE), width = 0.5) +
+      scale_fill_manual(values = pal_mrs, drop = FALSE, name = "mRS") +
+      scale_y_continuous(labels = percent_format(accuracy = 1)) +
+      coord_flip() +
+      labs(x = NULL, y = "Proportion") +
+      theme_dashboard() +
+      theme(axis.text.y = element_blank(), axis.ticks.y = element_blank())
+    ggplotly(p, tooltip = "text") |>
+      layout(paper_bgcolor = "#f8f9fa", plot_bgcolor = "#f8f9fa")
+  })
+  
+  output$plot_avch_volume <- renderPlotly({
+    d <- df_avch() |> filter(!is.na(hip_vol), !is.na(hip_30))
+    if (nrow(d) == 0) return(plotly_empty())
+    d$hip_30 <- factor(d$hip_30, levels = c("< 30 mL", "\u2265 30 mL"))
+    p <- ggplot(d, aes(x = hip_30, y = hip_vol, fill = hip_30,
+                       text = paste0(hip_30, "<br>Volume = ", round(hip_vol, 1), " mL"))) +
+      geom_boxplot(alpha = 0.8, outlier.shape = 21) +
+      scale_fill_manual(values = c("< 30 mL" = "#2A9D8F", "\u2265 30 mL" = "#E63946")) +
+      labs(x = NULL, y = "Volume de l'hématome (mL)") +
+      theme_dashboard() + theme(legend.position = "none")
     ggplotly(p, tooltip = "text") |>
       layout(paper_bgcolor = "#f8f9fa", plot_bgcolor = "#f8f9fa")
   })
@@ -1683,12 +1752,10 @@ server <- function(input, output, session) {
       geom_bar(width = 0.7) +
       scale_x_upset(n_intersections = 12, n_sets = 10) +
       scale_fill_manual(values = pal_centre_auto, name = "Centre") +
-      labs(x = NULL, y = "Nombre de patients",
-           title = "Combinaisons de traitements de l'HTIC — réparties par centre") +
+      labs(x = NULL, y = "Nombre de patients") +
       theme_dashboard() +
       theme(
         axis.text.x = element_text(size = 8),
-        plot.title  = element_text(size = 11),
         legend.position = "right"
       )
   }, res = 96)
@@ -2049,33 +2116,97 @@ server <- function(input, output, session) {
     if (nrow(d) < 2) return(plotly_empty())
     fit <- survival::survfit(survival::Surv(tps, statut) ~ grp, data = d)
     sd  <- surv_to_df(fit)
-    cens   <- sd[sd$n_cens > 0, , drop = FALSE]
     n_tot  <- nrow(d)
     n_dc   <- sum(d$statut == 1)
     n_nofu <- sum(d$statut == 0 & !d$suivi_dist)
     med_fu <- median(d$tps[d$statut == 0], na.rm = TRUE)
-    p <- ggplot(sd, aes(x = time, y = surv, color = strata, group = strata,
-                        text = paste0(strata, "<br>J", round(time),
-                                      "<br>Survie ", round(100 * surv, 1), "%",
-                                      "<br>À risque : ", n_risk))) +
+    # ── Courbe de survie ──
+    p_curve <- ggplot(sd, aes(x = time, y = surv, color = strata, group = strata,
+                              text = paste0(strata, "<br>J", round(time),
+                                            "<br>Survie ", round(100 * surv, 1), "%",
+                                            "<br>À risque : ", n_risk))) +
       geom_step(linewidth = 0.8) +
-      geom_point(data = cens,
-                 aes(x = time, y = surv, color = strata,
-                     text = paste0(strata, "<br>Censure à J", round(time))),
-                 shape = 124, size = 2.5, inherit.aes = FALSE, show.legend = FALSE) +
       scale_color_manual(values = pal_vec, drop = FALSE, name = NULL) +
       scale_y_continuous(labels = percent_format(), limits = c(0, 1)) +
       coord_cartesian(xlim = c(0, km_horizon)) +
-      labs(x = "Jours depuis l'admission", y = "Survie",
-           subtitle = sprintf("N=%d · décès=%d · suivi médian=%d j · %d sans suivi à distance (censurés à la sortie) · | = censure",
+      labs(x = NULL, y = "Survie",
+           subtitle = sprintf("N=%d · décès=%d · suivi médian=%d j · %d sans suivi à distance",
                               n_tot, n_dc, ifelse(is.na(med_fu), 0, round(med_fu)), n_nofu)) +
       theme_dashboard()
-    ggplotly(p, tooltip = "text") |>
+    # ── Tableau du nombre à risque ──
+    tp  <- seq(0, km_horizon, by = 90)
+    sm  <- summary(fit, times = tp, extend = TRUE)
+    risk <- data.frame(
+      time   = sm$time,
+      n_risk = sm$n.risk,
+      strata = if (is.null(sm$strata)) "Global" else sub("^[^=]*=", "", as.character(sm$strata)),
+      stringsAsFactors = FALSE)
+    risk$strata <- factor(risk$strata, levels = rev(sort(unique(risk$strata))))
+    p_tab <- ggplot(risk, aes(x = time, y = strata, color = strata,
+                              text = paste0(strata, "<br>J", time, " : ", n_risk, " à risque"))) +
+      geom_text(aes(label = n_risk), size = 3) +
+      scale_color_manual(values = pal_vec, drop = FALSE, guide = "none") +
+      scale_x_continuous(limits = c(0, km_horizon), breaks = tp) +
+      labs(x = "Jours depuis l'admission", y = NULL, title = "Nombre à risque") +
+      theme_dashboard() +
+      theme(panel.grid = element_blank(), legend.position = "none",
+            plot.title = element_text(size = 10))
+    plotly::subplot(ggplotly(p_curve, tooltip = "text"),
+                    ggplotly(p_tab,   tooltip = "text"),
+                    nrows = 2, heights = c(0.74, 0.26), shareX = TRUE, titleY = TRUE) |>
       layout(paper_bgcolor = "#f8f9fa", plot_bgcolor = "#f8f9fa")
   }
   
   output$plot_km_patho  <- renderPlotly({ km_plot("diagnostic", pal_patho) })
   output$plot_km_centre <- renderPlotly({ km_plot("centre",     pal_centre_auto) })
+  
+  # ═══════ SANKEY : parcours des patients ═══════════════
+  # Pire GCS H24 (catégorisé) -> diagnostic -> sortie de réa -> mRS dichotomisé
+  output$plot_sankey <- renderPlotly({
+    d <- df_f() |>
+      filter(!is.na(gcs_pire24), !is.na(diagnostic)) |>
+      mutate(
+        gcs_cat = case_when(
+          gcs_pire24 <= 8  ~ "GCS 3-8",
+          gcs_pire24 <= 12 ~ "GCS 9-12",
+          TRUE             ~ "GCS 13-15"),
+        # Niveau 3 : lieu de sortie de réa ; décès sans lieu -> "Décès en réa"
+        sortie = case_when(
+          !is.na(sortie_rea.factor) ~ as.character(sortie_rea.factor),
+          deces_total == 1          ~ "Décès en réa",
+          TRUE                      ~ NA_character_),
+        # Niveau 4 : devenir fonctionnel (décès = mRS 6)
+        mrs_term = case_when(
+          deces_total == 1                                ~ "mRS 6 (décès)",
+          suppressWarnings(as.numeric(mrs_distance)) < 3  ~ "mRS 0-2",
+          suppressWarnings(as.numeric(mrs_distance)) >= 3 ~ "mRS 3-5",
+          TRUE ~ NA_character_)
+      ) |>
+      filter(!is.na(sortie), !is.na(mrs_term))
+    if (nrow(d) == 0) return(plotly_empty())
+    l1 <- d |> count(source = gcs_cat,    target = diagnostic)
+    l2 <- d |> count(source = diagnostic, target = sortie)
+    l3 <- d |> count(source = sortie,     target = mrs_term)
+    links <- bind_rows(l1, l2, l3)
+    nodes <- unique(c(l1$source, l1$target, l2$target, l3$target))
+    idx   <- setNames(seq_along(nodes) - 1L, nodes)
+    col_nodes <- dplyr::case_when(
+      nodes == "mRS 0-2"                        ~ "#1A9850",
+      nodes == "mRS 3-5"                        ~ "#F46D43",
+      nodes %in% c("mRS 6 (décès)", "Décès en réa") ~ "#A50026",
+      TRUE                                      ~ "#457B9D")
+    plot_ly(
+      type = "sankey", orientation = "h",
+      node = list(label = nodes, pad = 15, thickness = 18,
+                  color = col_nodes,
+                  line = list(color = "white", width = 0.5)),
+      link = list(source = unname(idx[links$source]),
+                  target = unname(idx[links$target]),
+                  value  = links$n)
+    ) |>
+      layout(paper_bgcolor = "#f8f9fa", font = list(size = 11),
+             margin = list(l = 10, r = 10, t = 10, b = 10))
+  })
   
   # ═══════ FUNNEL PLOT INTER-CENTRES ════════════════════
   # Évènements/effectif par centre pour l'indicateur en % sélectionné
