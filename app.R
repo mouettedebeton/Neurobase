@@ -15,6 +15,7 @@ library(ggsci)
 library(forcats)
 library(ggupset)
 library(survival)
+library(readr)
 
 # ---- Chargement & préparation des données ------------------
 df_raw <- read_rds("data.rds") |>
